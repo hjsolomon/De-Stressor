@@ -703,15 +703,17 @@ document.getElementById('savedPresets').addEventListener('change', (e)=>{
 let pending = [];
 window.addEventListener('message', (ev)=>{
   if(ev.source !== window.parent) return;
-  if(pending.length===0) return;
+  if(pending.length===0){
+    console.warn('[DeStressor] got a message from Photopea with nothing pending — ignoring:', ev.data);
+    return;
+  }
   const cur = pending[0];
   if(ev.data === 'done'){
-    // Always shift, even if this entry already timed out — this keeps the
-    // queue in the right order so a late 'done' can never get attributed
-    // to a *different*, newer call.
+    console.log('[DeStressor] received "done" for pending call #'+pending.length, cur.settled ? '(was already timed out — late arrival)' : '');
     pending.shift();
     if(!cur.settled){ cur.settled = true; cur.resolve(cur.results); }
   } else {
+    console.log('[DeStressor] received data chunk:', (ev.data instanceof ArrayBuffer) ? ('ArrayBuffer('+ev.data.byteLength+' bytes)') : ev.data);
     cur.results.push(ev.data);
   }
 });
@@ -720,13 +722,15 @@ function runScript(script, timeoutMs){
     const entry = {results:[], settled:false};
     entry.resolve = (r)=>{ clearTimeout(t); resolve(r); };
     pending.push(entry);
+    console.log('[DeStressor] sending script to Photopea, queue depth now', pending.length);
     const t = setTimeout(()=>{
       if(entry.settled) return;
       entry.settled = true; // Don't splice it out of `pending` — it needs to
       // stay in place so the eventual (or never-coming) 'done' for THIS call
       // gets consumed here, not misapplied to whatever gets queued next.
+      console.error('[DeStressor] TIMEOUT waiting for Photopea. Queue depth:', pending.length, 'Results received so far for this call:', entry.results);
       reject(new Error('Photopea did not respond (timeout). Is a document open, with a layer selected?'));
-    }, timeoutMs||120000);
+    }, timeoutMs||20000);
     window.parent.postMessage(script, '*');
   });
 }
