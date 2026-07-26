@@ -777,13 +777,24 @@ async function applyDistress(){
       try {
         var doc = app.activeDocument;
         var target = doc.layers.getByName(${jsStr(token)});
-        var clone = doc.duplicate();
-        var cTarget = clone.layers.getByName(${jsStr(token)});
-        for (var i = clone.layers.length - 1; i >= 0; i--) {
-          if (clone.layers[i] !== cTarget) { try { clone.layers[i].remove(); } catch(e){} }
+        if (!target) throw "Could not find the layer to isolate.";
+        // Avoid doc.duplicate() — it can throw an uncaught internal error in
+        // Photopea for some documents (smart objects / effects / masks),
+        // which kills the script before it can respond. Instead: hide every
+        // other top-level layer, export the composite (= just our target
+        // layer), then restore the original visibility.
+        var savedVis = [];
+        for (var i = 0; i < doc.layers.length; i++) {
+          savedVis.push(doc.layers[i].visible);
+          doc.layers[i].visible = (doc.layers[i] === target);
         }
-        clone.saveToOE("png");
-        clone.close(SaveOptions.DONOTSAVECHANGES);
+        try {
+          doc.saveToOE("png");
+        } finally {
+          for (var j = 0; j < doc.layers.length; j++) {
+            doc.layers[j].visible = savedVis[j];
+          }
+        }
       } catch(e) {
         app.echoToOE(JSON.stringify({ok:false, error: String(e)}));
       }
