@@ -778,23 +778,20 @@ async function applyDistress(){
         var doc = app.activeDocument;
         var target = doc.layers.getByName(${jsStr(token)});
         if (!target) throw "Could not find the layer to isolate.";
-        // Avoid doc.duplicate() — it can throw an uncaught internal error in
-        // Photopea for some documents (smart objects / effects / masks),
-        // which kills the script before it can respond. Instead: hide every
-        // other top-level layer, export the composite (= just our target
-        // layer), then restore the original visibility.
-        var savedVis = [];
-        for (var i = 0; i < doc.layers.length; i++) {
-          savedVis.push(doc.layers[i].visible);
-          doc.layers[i].visible = (doc.layers[i] === target);
+        // Avoid doc.duplicate() — it throws an uncaught internal error in
+        // Photopea for some documents. Also avoid a hide-siblings/export
+        // trick — Photopea doesn't reliably recomposite in the same script
+        // tick, so that produced a blank export. Instead: duplicate just
+        // the layer (ArtLayer.duplicate, a different / more stable API,
+        // already used successfully below in the "send result back" step)
+        // into a fresh transparent document of the same pixel size.
+        var isoDoc = app.documents.add(doc.width, doc.height, doc.resolution, "iso_tmp", NewDocumentMode.RGB, DocumentFill.TRANSPARENT);
+        var isoLayer = target.duplicate(isoDoc, ElementPlacement.PLACEATBEGINNING);
+        for (var i = isoDoc.layers.length - 1; i >= 0; i--) {
+          if (isoDoc.layers[i] !== isoLayer) { try { isoDoc.layers[i].remove(); } catch(e){} }
         }
-        try {
-          doc.saveToOE("png");
-        } finally {
-          for (var j = 0; j < doc.layers.length; j++) {
-            doc.layers[j].visible = savedVis[j];
-          }
-        }
+        isoDoc.saveToOE("png");
+        isoDoc.close(SaveOptions.DONOTSAVECHANGES);
       } catch(e) {
         app.echoToOE(JSON.stringify({ok:false, error: String(e)}));
       }
