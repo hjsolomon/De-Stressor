@@ -706,22 +706,27 @@ window.addEventListener('message', (ev)=>{
   if(pending.length===0) return;
   const cur = pending[0];
   if(ev.data === 'done'){
+    // Always shift, even if this entry already timed out — this keeps the
+    // queue in the right order so a late 'done' can never get attributed
+    // to a *different*, newer call.
     pending.shift();
-    cur.resolve(cur.results);
+    if(!cur.settled){ cur.settled = true; cur.resolve(cur.results); }
   } else {
     cur.results.push(ev.data);
   }
 });
 function runScript(script, timeoutMs){
   return new Promise((resolve,reject)=>{
-    const entry = {resolve, results:[]};
+    const entry = {results:[], settled:false};
+    entry.resolve = (r)=>{ clearTimeout(t); resolve(r); };
     pending.push(entry);
     const t = setTimeout(()=>{
-      const i = pending.indexOf(entry);
-      if(i!==-1){ pending.splice(i,1); reject(new Error('Photopea did not respond (timeout). Is a document open?')); }
+      if(entry.settled) return;
+      entry.settled = true; // Don't splice it out of `pending` — it needs to
+      // stay in place so the eventual (or never-coming) 'done' for THIS call
+      // gets consumed here, not misapplied to whatever gets queued next.
+      reject(new Error('Photopea did not respond (timeout). Is a document open, with a layer selected?'));
     }, timeoutMs||20000);
-    const wrappedResolve = entry.resolve;
-    entry.resolve = (r)=>{ clearTimeout(t); wrappedResolve(r); };
     window.parent.postMessage(script, '*');
   });
 }
@@ -744,31 +749,44 @@ async function applyDistress(){
     const token = '__distress_' + Date.now() + '_' + Math.floor(Math.random()*1e6) + '__';
 
     const scriptTag = `
-      var doc = app.activeDocument;
-      var lyr = doc.activeLayer;
-      app.echoToOE(JSON.stringify({name: lyr.name, w: doc.width, h: doc.height}));
-      lyr.name = ${jsStr(token)};
+      try {
+        var doc = app.activeDocument;
+        if (!doc) throw "No document is open in Photopea.";
+        var lyr = doc.activeLayer;
+        if (!lyr) throw "No layer is selected in Photopea.";
+        app.echoToOE(JSON.stringify({ok:true, name: lyr.name, w: doc.width, h: doc.height}));
+        lyr.name = ${jsStr(token)};
+      } catch(e) {
+        app.echoToOE(JSON.stringify({ok:false, error: String(e)}));
+      }
     `;
     const resTag = await runScript(scriptTag);
-    if(!resTag.length) throw new Error('No document / layer selected in Photopea.');
+    if(!resTag.length) throw new Error('Photopea sent no data back — try clicking Apply again.');
     const info = JSON.parse(resTag[0]);
+    if(!info.ok) throw new Error(info.error || 'No document / layer selected in Photopea.');
     const w = Math.max(1, Math.round(info.w));
     const h = Math.max(1, Math.round(info.h));
     const origName = info.name;
 
     setStatus('Isolating layer pixels…');
     const scriptIsolate = `
-      var doc = app.activeDocument;
-      var target = doc.layers.getByName(${jsStr(token)});
-      var clone = doc.duplicate();
-      var cTarget = clone.layers.getByName(${jsStr(token)});
-      for (var i = clone.layers.length - 1; i >= 0; i--) {
-        if (clone.layers[i] !== cTarget) { try { clone.layers[i].remove(); } catch(e){} }
+      try {
+        var doc = app.activeDocument;
+        var target = doc.layers.getByName(${jsStr(token)});
+        var clone = doc.duplicate();
+        var cTarget = clone.layers.getByName(${jsStr(token)});
+        for (var i = clone.layers.length - 1; i >= 0; i--) {
+          if (clone.layers[i] !== cTarget) { try { clone.layers[i].remove(); } catch(e){} }
+        }
+        clone.saveToOE("png");
+        clone.close(SaveOptions.DONOTSAVECHANGES);
+      } catch(e) {
+        app.echoToOE(JSON.stringify({ok:false, error: String(e)}));
       }
-      clone.saveToOE("png");
-      clone.close(SaveOptions.DONOTSAVECHANGES);
     `;
     const resIsolate = await runScript(scriptIsolate, 30000);
+    const errIsolate = resIsolate.find(r => typeof r === 'string' && r.indexOf('"ok":false') !== -1);
+    if(errIsolate) throw new Error(JSON.parse(errIsolate).error || 'Photopea failed to isolate the layer.');
     const pngBuf = resIsolate.find(r => r instanceof ArrayBuffer || (r && r.byteLength!==undefined));
     if(!pngBuf) throw new Error('Photopea did not return layer pixel data.');
 
@@ -797,20 +815,26 @@ async function applyDistress(){
     setStatus('Sending result back to Photopea…');
     const resultName = origName + ' (Distressed)';
     const scriptFinish = `
-      var targetDoc = app.activeDocument;
-      var origLayer = targetDoc.layers.getByName(${jsStr(token)});
-      app.open(${jsStr(dataURI)}, null, true);
-      var srcDoc = app.activeDocument;
-      var newLayer = srcDoc.activeLayer;
-      newLayer.name = ${jsStr(resultName)};
-      newLayer.duplicate(targetDoc, ElementPlacement.PLACEATBEGINNING);
-      srcDoc.close(SaveOptions.DONOTSAVECHANGES);
-      app.activeDocument = targetDoc;
-      origLayer.name = ${jsStr(origName)};
-      ${state.replaceMode ? 'try{ origLayer.remove(); }catch(e){}' : 'origLayer.visible = false;'}
-      app.echoToOE("applied");
+      try {
+        var targetDoc = app.activeDocument;
+        var origLayer = targetDoc.layers.getByName(${jsStr(token)});
+        app.open(${jsStr(dataURI)}, null, true);
+        var srcDoc = app.activeDocument;
+        var newLayer = srcDoc.activeLayer;
+        newLayer.name = ${jsStr(resultName)};
+        newLayer.duplicate(targetDoc, ElementPlacement.PLACEATBEGINNING);
+        srcDoc.close(SaveOptions.DONOTSAVECHANGES);
+        app.activeDocument = targetDoc;
+        origLayer.name = ${jsStr(origName)};
+        ${state.replaceMode ? 'try{ origLayer.remove(); }catch(e){}' : 'origLayer.visible = false;'}
+        app.echoToOE(JSON.stringify({ok:true}));
+      } catch(e) {
+        app.echoToOE(JSON.stringify({ok:false, error: String(e)}));
+      }
     `;
-    await runScript(scriptFinish, 30000);
+    const resFinish = await runScript(scriptFinish, 30000);
+    const finishInfo = resFinish.length ? JSON.parse(resFinish[resFinish.length-1]) : null;
+    if(!finishInfo || !finishInfo.ok) throw new Error((finishInfo && finishInfo.error) || 'Photopea did not confirm the result — check the document, it may have partially applied.');
     setStatus('Distress applied to "'+resultName+'".', false, true);
 
   } catch(err){
