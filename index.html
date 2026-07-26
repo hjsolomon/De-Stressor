@@ -1,0 +1,849 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>De-Stressor</title>
+<style>
+  :root{
+    --bg:#242424; --bg2:#2c2c2c; --panel:#1c1c1c; --line:#3a3a3a;
+    --ink:#d8d4cc; --dim:#8a8579; --accent:#c1541f; --accent2:#e07a3e;
+    --danger:#a83b2e; --mono:'IBM Plex Mono','SF Mono',Consolas,monospace;
+    --sans:'IBM Plex Sans',-apple-system,Segoe UI,Roboto,sans-serif;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; background:var(--bg); color:var(--ink); font-family:var(--sans);
+    font-size:12px; -webkit-font-smoothing:antialiased; user-select:none;
+  }
+  ::-webkit-scrollbar{width:8px;height:8px;}
+  ::-webkit-scrollbar-thumb{background:#454545;border-radius:4px;}
+  ::-webkit-scrollbar-track{background:var(--bg);}
+
+  #app{display:flex; flex-direction:column; height:100vh;}
+
+  header{
+    padding:10px 12px 8px; border-bottom:1px solid var(--line);
+    background:linear-gradient(180deg,#2a2a2a,#232323);
+  }
+  header h1{
+    margin:0; font-family:var(--mono); font-size:13px; letter-spacing:.14em;
+    text-transform:uppercase; color:var(--ink); font-weight:600;
+  }
+  header h1 .dot{color:var(--accent);}
+  header p{margin:3px 0 0; font-size:10.5px; color:var(--dim); line-height:1.4;}
+
+  .scroll{flex:1; overflow-y:auto; padding:10px 12px 14px;}
+
+  .section-label{
+    font-family:var(--mono); font-size:9.5px; letter-spacing:.12em; text-transform:uppercase;
+    color:var(--dim); margin:14px 0 6px; display:flex; align-items:center; gap:6px;
+  }
+  .section-label:first-child{margin-top:0;}
+  .section-label::after{content:""; flex:1; height:1px; background:var(--line);}
+  .section-label .idx{color:var(--accent2);}
+
+  /* style grid */
+  #styleGrid{
+    display:grid; grid-template-columns:repeat(4,1fr); gap:6px;
+  }
+  .style-cell{
+    position:relative; border:1px solid var(--line); border-radius:3px; cursor:pointer;
+    background:#111; overflow:hidden; aspect-ratio:1/1;
+  }
+  .style-cell canvas{display:block; width:100%; height:100%;}
+  .style-cell .lbl{
+    position:absolute; left:0; right:0; bottom:0; padding:2px 4px;
+    font-size:8.5px; font-family:var(--mono); background:rgba(0,0,0,.6);
+    color:#cfcabf; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+  }
+  .style-cell.active{border-color:var(--accent); box-shadow:0 0 0 1px var(--accent);}
+  .style-cell.active .lbl{background:var(--accent); color:#fff;}
+  .style-cell:hover{border-color:#666;}
+
+  /* sliders */
+  .ctrl-row{margin-bottom:10px;}
+  .ctrl-head{display:flex; justify-content:space-between; align-items:baseline; margin-bottom:4px;}
+  .ctrl-head label{font-size:11px; color:var(--ink);}
+  .ctrl-head .val{font-family:var(--mono); font-size:10.5px; color:var(--accent2); min-width:34px; text-align:right;}
+  input[type=range]{
+    -webkit-appearance:none; width:100%; height:3px; background:var(--line);
+    border-radius:2px; outline:none; margin:0;
+  }
+  input[type=range]::-webkit-slider-thumb{
+    -webkit-appearance:none; width:12px; height:12px; border-radius:50%;
+    background:var(--accent2); border:2px solid #1c1c1c; cursor:pointer; margin-top:-1px;
+  }
+  input[type=range]::-moz-range-thumb{
+    width:10px; height:10px; border-radius:50%; background:var(--accent2); border:2px solid #1c1c1c; cursor:pointer;
+  }
+
+  .row2{display:grid; grid-template-columns:1fr 1fr; gap:8px;}
+
+  .toggle-row{display:flex; align-items:center; justify-content:space-between; margin-bottom:10px;}
+  .switch{position:relative; width:32px; height:18px; flex:none;}
+  .switch input{opacity:0; width:0; height:0;}
+  .slider-pill{
+    position:absolute; cursor:pointer; inset:0; background:#3a3a3a; border-radius:20px; transition:.15s;
+  }
+  .slider-pill::before{
+    content:""; position:absolute; width:14px; height:14px; left:2px; top:2px; background:#c8c3b8;
+    border-radius:50%; transition:.15s;
+  }
+  .switch input:checked + .slider-pill{background:var(--accent);}
+  .switch input:checked + .slider-pill::before{transform:translateX(14px); background:#fff;}
+
+  .btn-row{display:flex; gap:6px; margin-top:4px;}
+  button{
+    font-family:var(--sans); font-size:11px; padding:7px 10px; border-radius:3px;
+    border:1px solid var(--line); background:#333; color:var(--ink); cursor:pointer;
+  }
+  button:hover{background:#3d3d3d; border-color:#555;}
+  button:active{transform:translateY(1px);}
+  button.ghost{background:transparent;}
+  button.small{padding:5px 8px; font-size:10.5px;}
+  button:disabled{opacity:.4; cursor:default;}
+
+  select{
+    width:100%; background:#2a2a2a; color:var(--ink); border:1px solid var(--line);
+    border-radius:3px; padding:6px 7px; font-size:11px; font-family:var(--sans);
+  }
+
+  #applyBtn{
+    width:100%; padding:11px; font-size:12px; font-weight:600; letter-spacing:.03em;
+    background:linear-gradient(180deg,var(--accent2),var(--accent)); color:#fff; border:none;
+    border-radius:4px; text-transform:uppercase; font-family:var(--mono); font-size:10.5px;
+    letter-spacing:.1em;
+  }
+  #applyBtn:hover{filter:brightness(1.08);}
+  #applyBtn:disabled{background:#4a4a4a; color:#8a8579;}
+
+  footer{
+    border-top:1px solid var(--line); padding:8px 12px; background:var(--panel);
+  }
+  #status{
+    font-family:var(--mono); font-size:10px; color:var(--dim); min-height:14px;
+    line-height:1.4; white-space:pre-wrap;
+  }
+  #status.err{color:#e08a6e;}
+  #status.ok{color:#7fae7a;}
+
+  .mini-toolbar{display:flex; gap:5px; margin-top:6px;}
+  .mini-toolbar button{flex:1;}
+
+  .swatch{display:flex; align-items:center; gap:6px;}
+  .swatch input[type=color]{
+    width:24px; height:24px; padding:0; border:1px solid var(--line); border-radius:3px; background:none;
+  }
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <h1>DE<span class="dot">·</span>STRESSOR</h1>
+    <p>Procedural wear &amp; grunge masking for the active layer, applied through transparency — non-destructive, undoable, no real-world texture photography required.</p>
+  </header>
+
+  <div class="scroll">
+
+    <div class="section-label"><span class="idx">01</span> STYLE</div>
+    <div id="styleGrid"></div>
+
+    <div class="section-label"><span class="idx">02</span> CONTROLS</div>
+
+    <div class="ctrl-row">
+      <div class="ctrl-head"><label>Scale</label><span class="val" id="v_scale">100%</span></div>
+      <input type="range" id="scale" min="10" max="400" value="100">
+    </div>
+    <div class="ctrl-row">
+      <div class="ctrl-head"><label>Amount</label><span class="val" id="v_amount">65%</span></div>
+      <input type="range" id="amount" min="0" max="100" value="65">
+    </div>
+    <div class="ctrl-row">
+      <div class="ctrl-head"><label>Contrast</label><span class="val" id="v_contrast">50%</span></div>
+      <input type="range" id="contrast" min="0" max="100" value="50">
+    </div>
+    <div class="ctrl-row">
+      <div class="ctrl-head"><label>Edge Softness</label><span class="val" id="v_soft">35%</span></div>
+      <input type="range" id="soft" min="0" max="100" value="35">
+    </div>
+    <div class="ctrl-row">
+      <div class="ctrl-head"><label>Rotation</label><span class="val" id="v_rot">0°</span></div>
+      <input type="range" id="rot" min="0" max="360" value="0">
+    </div>
+
+    <div class="toggle-row">
+      <label>Invert mask</label>
+      <label class="switch"><input type="checkbox" id="invert"><span class="slider-pill"></span></label>
+    </div>
+    <div class="toggle-row">
+      <label>Replace original layer</label>
+      <label class="switch"><input type="checkbox" id="replaceMode" checked><span class="slider-pill"></span></label>
+    </div>
+
+    <div class="btn-row">
+      <button id="randomizeBtn" class="ghost small" style="flex:1">⟲ Randomize seed</button>
+    </div>
+
+    <div class="section-label"><span class="idx">03</span> PRESETS</div>
+    <div class="row2">
+      <button id="copyBtn" class="small">Copy settings</button>
+      <button id="pasteBtn" class="small">Paste settings</button>
+    </div>
+    <div class="ctrl-row" style="margin-top:8px;">
+      <select id="savedPresets"><option value="">— saved presets —</option></select>
+      <div class="mini-toolbar">
+        <button id="savePresetBtn" class="small ghost">Save as…</button>
+        <button id="deletePresetBtn" class="small ghost">Delete</button>
+      </div>
+    </div>
+
+  </div>
+
+  <footer>
+    <button id="applyBtn">Apply distress</button>
+    <div id="status" style="margin-top:7px;">Connecting to Photopea…</div>
+  </footer>
+</div>
+
+<script>
+/* =========================================================================
+   DE-STRESSOR for Photopea
+   A from-scratch, procedurally-generated equivalent of Texturelabs' Distressor
+   panel for Photoshop: pick a distress style, tune sliders, and it erodes the
+   active layer's transparency to create a worn / weathered look — without
+   relying on any of Texturelabs' proprietary photographed textures (all 14
+   patterns here are generated algorithmically at run time from a seeded PRNG).
+   ========================================================================= */
+
+/* ---------- tiny seeded PRNG (mulberry32) ---------- */
+function mulberry32(seed){
+  return function(){
+    seed |= 0; seed = (seed + 0x6D2B79F5) | 0;
+    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+/* ---------- value-noise helper (cheap pseudo-perlin) ---------- */
+function makeValueNoise(rng, gridSize){
+  const g = gridSize;
+  const grid = new Float32Array((g+1)*(g+1));
+  for(let i=0;i<grid.length;i++) grid[i] = rng();
+  function smooth(t){ return t*t*(3-2*t); }
+  return function(x,y){ // x,y in [0,1)
+    const gx = x*g, gy = y*g;
+    const x0 = Math.floor(gx), y0 = Math.floor(gy);
+    const x1 = (x0+1), y1 = (y0+1);
+    const sx = smooth(gx-x0), sy = smooth(gy-y0);
+    const idx = (xx,yy)=> grid[((yy%(g+1))+(g+1))%(g+1)*(g+1) + (((xx%(g+1))+(g+1))%(g+1))];
+    const n00=idx(x0,y0), n10=idx(x1,y0), n01=idx(x0,y1), n11=idx(x1,y1);
+    const nx0 = n00 + (n10-n00)*sx;
+    const nx1 = n01 + (n11-n01)*sx;
+    return nx0 + (nx1-nx0)*sy;
+  };
+}
+function fbm(noiseFns, x, y, weights){
+  let sum=0, wsum=0;
+  for(let i=0;i<noiseFns.length;i++){ sum += noiseFns[i](x,y)*weights[i]; wsum+=weights[i]; }
+  return sum/wsum;
+}
+
+/* =========================================================================
+   14 DISTRESS STYLE GENERATORS
+   Each returns a function render(ctx, w, h, params) that paints a GRAYSCALE
+   mask into ctx: white = keep layer opaque, black = erode to transparent.
+   params: {seed, scaleFactor, contrast(0-1), soft(0-1)}
+   ========================================================================= */
+const STYLES = [];
+
+function baseNoiseCanvas(w,h,rng,octaves,scaleFactor){
+  const cell = Math.max(4, Math.round(24*scaleFactor));
+  const gridSize = Math.max(2, Math.round(w/cell));
+  const layers=[], weights=[];
+  let g = gridSize, wgt=1;
+  for(let o=0;o<octaves;o++){
+    layers.push(makeValueNoise(rng, Math.max(2,Math.round(g))));
+    weights.push(wgt);
+    g = Math.max(2, Math.round(g*1.9));
+    wgt *= 0.55;
+  }
+  return {layers, weights};
+}
+
+function fillFromField(ctx,w,h,fieldFn){
+  const img = ctx.createImageData(w,h);
+  for(let y=0;y<h;y++){
+    for(let x=0;x<w;x++){
+      let v = fieldFn(x/w, y/h, x, y);
+      v = Math.max(0, Math.min(1, v));
+      const p = (y*w+x)*4;
+      const c = Math.round(v*255);
+      img.data[p]=c; img.data[p+1]=c; img.data[p+2]=c; img.data[p+3]=255;
+    }
+  }
+  ctx.putImageData(img,0,0);
+}
+
+// 1. Paper Grain — fine fbm noise, high frequency
+STYLES.push({name:"Paper Grain", gen(ctx,w,h,p){
+  const rng = mulberry32(p.seed);
+  const {layers,weights} = baseNoiseCanvas(w,h,rng,3,p.scaleFactor*0.5);
+  fillFromField(ctx,w,h,(u,v)=> 0.5 + (fbm(layers,u,v,weights)-0.5)*1.6);
+}});
+
+// 2. Cracked Paint — ridged noise thresholded into vein-like cracks
+STYLES.push({name:"Cracked Paint", gen(ctx,w,h,p){
+  const rng = mulberry32(p.seed);
+  const {layers,weights} = baseNoiseCanvas(w,h,rng,4,p.scaleFactor);
+  fillFromField(ctx,w,h,(u,v)=>{
+    let n = fbm(layers,u,v,weights);
+    let ridge = 1 - Math.abs(2*n-1);
+    ridge = Math.pow(ridge, 3.2);
+    return 1-ridge;
+  });
+}});
+
+// 3. Rust & Corrosion — blotchy low-freq noise w/ speckle overlay
+STYLES.push({name:"Rust", gen(ctx,w,h,p){
+  const rng = mulberry32(p.seed);
+  const {layers,weights} = baseNoiseCanvas(w,h,rng,3,p.scaleFactor*1.4);
+  const speck = mulberry32(p.seed^0x9e3779b9);
+  fillFromField(ctx,w,h,(u,v)=>{
+    let n = fbm(layers,u,v,weights);
+    let blot = Math.pow(n,1.6);
+    let s = speck()<0.02 ? -0.4:0;
+    return blot+s;
+  });
+}});
+
+// 4. Concrete — mid noise + fine grain composited
+STYLES.push({name:"Concrete", gen(ctx,w,h,p){
+  const rng = mulberry32(p.seed);
+  const base = baseNoiseCanvas(w,h,rng,2,p.scaleFactor*1.2);
+  const grainRng = mulberry32(p.seed^0x1234567);
+  fillFromField(ctx,w,h,(u,v)=>{
+    let n = fbm(base.layers,u,v,base.weights);
+    let grain = (grainRng()-0.5)*0.15;
+    return n*0.85+0.15+grain;
+  });
+}});
+
+// 5. Scratches — many thin random-angle strokes
+STYLES.push({name:"Scratches", gen(ctx,w,h,p){
+  ctx.fillStyle="#fff"; ctx.fillRect(0,0,w,h);
+  const rng = mulberry32(p.seed);
+  const count = Math.round(40 + 260*(p.scaleFactor));
+  ctx.strokeStyle="#000";
+  for(let i=0;i<count;i++){
+    const len = (0.15+rng()*0.6)*Math.max(w,h);
+    const cx=rng()*w, cy=rng()*h;
+    const ang = (p.rot*Math.PI/180) + (rng()-0.5)*0.6;
+    const dx=Math.cos(ang)*len/2, dy=Math.sin(ang)*len/2;
+    ctx.lineWidth = 0.5+rng()*1.8;
+    ctx.globalAlpha = 0.35+rng()*0.65;
+    ctx.beginPath();
+    ctx.moveTo(cx-dx, cy-dy);
+    ctx.lineTo(cx+dx, cy+dy);
+    ctx.stroke();
+  }
+  ctx.globalAlpha=1;
+}});
+
+// 6. Spray Splatter — random soft-edged circles of varying radius
+STYLES.push({name:"Splatter", gen(ctx,w,h,p){
+  ctx.fillStyle="#fff"; ctx.fillRect(0,0,w,h);
+  const rng = mulberry32(p.seed);
+  const count = Math.round(120 + 500/(p.scaleFactor+0.2));
+  for(let i=0;i<count;i++){
+    const r = (2+rng()*rng()*40)*p.scaleFactor;
+    const cx=rng()*w, cy=rng()*h;
+    const g = ctx.createRadialGradient(cx,cy,0,cx,cy,r);
+    g.addColorStop(0,"rgba(0,0,0,0.9)");
+    g.addColorStop(1,"rgba(0,0,0,0)");
+    ctx.fillStyle=g;
+    ctx.beginPath(); ctx.arc(cx,cy,r,0,Math.PI*2); ctx.fill();
+  }
+}});
+
+// 7. Torn Edges — noise field biased toward canvas border
+STYLES.push({name:"Torn Edges", gen(ctx,w,h,p){
+  const rng = mulberry32(p.seed);
+  const {layers,weights} = baseNoiseCanvas(w,h,rng,3,p.scaleFactor*0.8);
+  fillFromField(ctx,w,h,(u,v)=>{
+    const edge = Math.min(u,1-u,v,1-v)*2; // 0 at border -> 1 inside
+    const n = fbm(layers,u,v,weights);
+    const torn = edge + (n-0.5)*0.9;
+    return torn;
+  });
+}});
+
+// 8. Dust & Grain — very fine sparse speckle
+STYLES.push({name:"Dust & Grain", gen(ctx,w,h,p){
+  ctx.fillStyle="#fff"; ctx.fillRect(0,0,w,h);
+  const rng = mulberry32(p.seed);
+  const density = 0.15*p.scaleFactor;
+  const img = ctx.getImageData(0,0,w,h);
+  const n = Math.round(w*h*density*0.02);
+  for(let i=0;i<n;i++){
+    const x=Math.floor(rng()*w), y=Math.floor(rng()*h);
+    const idx=(y*w+x)*4;
+    const dark = Math.round(rng()*180);
+    img.data[idx]=dark; img.data[idx+1]=dark; img.data[idx+2]=dark;
+  }
+  ctx.putImageData(img,0,0);
+}});
+
+// 9. Halftone Grunge — dot grid modulated by noise
+STYLES.push({name:"Halftone Grunge", gen(ctx,w,h,p){
+  ctx.fillStyle="#fff"; ctx.fillRect(0,0,w,h);
+  const rng = mulberry32(p.seed);
+  const {layers,weights} = baseNoiseCanvas(w,h,rng,2,p.scaleFactor);
+  const cell = Math.max(4, Math.round(14*p.scaleFactor));
+  ctx.save();
+  ctx.translate(w/2,h/2); ctx.rotate(p.rot*Math.PI/180); ctx.translate(-w/2,-h/2);
+  ctx.fillStyle="#000";
+  for(let y=-cell;y<h+cell;y+=cell){
+    for(let x=-cell;x<w+cell;x+=cell){
+      const u=Math.max(0,Math.min(1,x/w)), v=Math.max(0,Math.min(1,y/h));
+      const n = fbm(layers,u,v,weights);
+      const r = (cell*0.5) * Math.max(0,Math.min(1, 1-n*1.3));
+      if(r>0.3){ ctx.beginPath(); ctx.arc(x,y,r,0,Math.PI*2); ctx.fill(); }
+    }
+  }
+  ctx.restore();
+}});
+
+// 10. Canvas Weave — crosshatched sinusoidal grid + noise
+STYLES.push({name:"Canvas Weave", gen(ctx,w,h,p){
+  const rng = mulberry32(p.seed);
+  const period = Math.max(3, 10*p.scaleFactor);
+  const rot = p.rot*Math.PI/180;
+  const cosr=Math.cos(rot), sinr=Math.sin(rot);
+  const jitter = (rng()-0.5)*0.3;
+  fillFromField(ctx,w,h,(u,v,x,y)=>{
+    const rx = x*cosr - y*sinr, ry = x*sinr + y*cosr;
+    const wx = Math.sin(rx/period*Math.PI*2);
+    const wy = Math.sin(ry/period*Math.PI*2);
+    return 0.5 + (wx*wy)*0.35 + jitter*0.2;
+  });
+}});
+
+// 11. Bark & Grain (wood) — stretched fbm along one axis
+STYLES.push({name:"Wood Grain", gen(ctx,w,h,p){
+  const rng = mulberry32(p.seed);
+  const {layers,weights} = baseNoiseCanvas(w,h,rng,4,p.scaleFactor*0.6);
+  const rot = p.rot*Math.PI/180;
+  const cosr=Math.cos(rot), sinr=Math.sin(rot);
+  fillFromField(ctx,w,h,(u,v,x,y)=>{
+    const rx = x*cosr - y*sinr;
+    const stretch = (rx/w)*0.15;
+    const n = fbm(layers, ((u+stretch)%1+1)%1, v*0.25, weights);
+    const rings = Math.sin(n*40)*0.5+0.5;
+    return rings*0.7+0.15;
+  });
+}});
+
+// 12. Ink Bleed — soft blobs with feathered fbm edges
+STYLES.push({name:"Ink Bleed", gen(ctx,w,h,p){
+  const rng = mulberry32(p.seed);
+  const {layers,weights} = baseNoiseCanvas(w,h,rng,4,p.scaleFactor*0.9);
+  fillFromField(ctx,w,h,(u,v)=>{
+    let n = fbm(layers,u,v,weights);
+    n = Math.pow(n, 0.6);
+    return n;
+  });
+}});
+
+// 13. Static / TV Noise — pure per-pixel random
+STYLES.push({name:"Static Noise", gen(ctx,w,h,p){
+  const rng = mulberry32(p.seed);
+  const img = ctx.createImageData(w,h);
+  const coarse = Math.max(1, Math.round(p.scaleFactor));
+  for(let y=0;y<h;y+=coarse){
+    for(let x=0;x<w;x+=coarse){
+      const c = Math.round(rng()*255);
+      for(let yy=0; yy<coarse && y+yy<h; yy++){
+        for(let xx=0; xx<coarse && x+xx<w; xx++){
+          const p2=((y+yy)*w+(x+xx))*4;
+          img.data[p2]=c; img.data[p2+1]=c; img.data[p2+2]=c; img.data[p2+3]=255;
+        }
+      }
+    }
+  }
+  ctx.putImageData(img,0,0);
+}});
+
+// 14. Cell / Organic Blotches — voronoi-ish via random feature points
+STYLES.push({name:"Organic Blotches", gen(ctx,w,h,p){
+  const rng = mulberry32(p.seed);
+  const n = Math.max(6, Math.round(60/p.scaleFactor));
+  const pts=[];
+  for(let i=0;i<n;i++) pts.push([rng()*w, rng()*h, rng()]);
+  const sample = 3; // downsample for perf, then upscale via drawImage
+  const sw = Math.max(8,Math.round(w/sample)), sh = Math.max(8,Math.round(h/sample));
+  const small = document.createElement('canvas'); small.width=sw; small.height=sh;
+  const sctx = small.getContext('2d');
+  const img = sctx.createImageData(sw,sh);
+  for(let y=0;y<sh;y++){
+    for(let x=0;x<sw;x++){
+      const px = x/sw*w, py = y/sh*h;
+      let best=1e18, second=1e18, bv=0;
+      for(let i=0;i<pts.length;i++){
+        const dx=px-pts[i][0], dy=py-pts[i][1];
+        const d = dx*dx+dy*dy;
+        if(d<best){ second=best; best=d; bv=pts[i][2]; }
+        else if(d<second){ second=d; }
+      }
+      const edge = Math.sqrt(second)-Math.sqrt(best);
+      const v = Math.max(0,Math.min(1, edge/40 + bv*0.3));
+      const idx=(y*sw+x)*4; const c=Math.round(v*255);
+      img.data[idx]=c; img.data[idx+1]=c; img.data[idx+2]=c; img.data[idx+3]=255;
+    }
+  }
+  sctx.putImageData(img,0,0);
+  ctx.imageSmoothingEnabled = true;
+  ctx.drawImage(small,0,0,w,h);
+}});
+
+/* ---------- apply contrast / softness / rotation post-processing ---------- */
+function postProcessMask(canvas, params){
+  const w=canvas.width, h=canvas.height;
+  const ctx = canvas.getContext('2d');
+
+  // rotation (skip for styles that already bake rotation in, harmless either way visually
+  // since it's applied post-hoc as a canvas transform on a re-rendered copy)
+  if(params.rot && params.rotApplied!==true){
+    const tmp = document.createElement('canvas'); tmp.width=w; tmp.height=h;
+    const tctx = tmp.getContext('2d');
+    tctx.translate(w/2,h/2);
+    tctx.rotate(params.rot*Math.PI/180);
+    tctx.translate(-w/2,-h/2);
+    // draw scaled up to cover corners after rotation
+    const diag = Math.sqrt(w*w+h*h);
+    tctx.drawImage(canvas, (w-diag)/2, (h-diag)/2, diag, diag);
+    ctx.clearRect(0,0,w,h);
+    ctx.drawImage(tmp,0,0);
+  }
+
+  const img = ctx.getImageData(0,0,w,h);
+  const d = img.data;
+  const c = params.contrast; // 0..1, 0.5 = neutral
+  const cf = (259*(c*255+255))/(255*(259-c*255)); // standard contrast formula, c in -255..255 remapped
+  const k = (c-0.5)*2; // -1..1
+  const factor = (259*((k*255)+255)) / (255*(259-(k*255)));
+  for(let i=0;i<d.length;i+=4){
+    let v = d[i];
+    v = factor*(v-128)+128;
+    v = Math.max(0,Math.min(255,v));
+    d[i]=v; d[i+1]=v; d[i+2]=v;
+  }
+  ctx.putImageData(img,0,0);
+
+  if(params.soft>0){
+    const blurPx = params.soft*6*params.scaleFactor;
+    if(blurPx>0.3){
+      const tmp = document.createElement('canvas'); tmp.width=w; tmp.height=h;
+      const tctx = tmp.getContext('2d');
+      tctx.filter = `blur(${blurPx}px)`;
+      tctx.drawImage(canvas,0,0);
+      ctx.clearRect(0,0,w,h);
+      ctx.drawImage(tmp,0,0);
+    }
+  }
+  if(params.invert){
+    const img2 = ctx.getImageData(0,0,w,h);
+    const d2=img2.data;
+    for(let i=0;i<d2.length;i+=4){ d2[i]=255-d2[i]; d2[i+1]=255-d2[i+1]; d2[i+2]=255-d2[i+2]; }
+    ctx.putImageData(img2,0,0);
+  }
+}
+
+function renderMask(canvas, styleIdx, params){
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  STYLES[styleIdx].gen(ctx, canvas.width, canvas.height, params);
+  const styleHandlesRotation = ["Scratches","Halftone Grunge","Canvas Weave","Wood Grain"].includes(STYLES[styleIdx].name);
+  postProcessMask(canvas, Object.assign({}, params, {rot: styleHandlesRotation?0:params.rot}));
+}
+
+/* =========================================================================
+   UI STATE + WIRING
+   ========================================================================= */
+const state = {
+  styleIdx: 0,
+  scale: 100, amount: 65, contrast: 50, soft: 35, rot: 0,
+  invert: false, replaceMode: true,
+  seed: Math.floor(Math.random()*1e9)
+};
+
+function currentParams(){
+  return {
+    seed: state.seed,
+    scaleFactor: state.scale/100,
+    contrast: state.contrast/100,
+    soft: state.soft/100,
+    rot: state.rot,
+    invert: state.invert
+  };
+}
+
+const styleGrid = document.getElementById('styleGrid');
+STYLES.forEach((s,i)=>{
+  const cell = document.createElement('div');
+  cell.className = 'style-cell' + (i===0?' active':'');
+  cell.dataset.idx = i;
+  const canvas = document.createElement('canvas');
+  canvas.width=64; canvas.height=64;
+  cell.appendChild(canvas);
+  const lbl = document.createElement('div');
+  lbl.className='lbl'; lbl.textContent = s.name;
+  cell.appendChild(lbl);
+  cell.addEventListener('click', ()=>{
+    document.querySelectorAll('.style-cell').forEach(c=>c.classList.remove('active'));
+    cell.classList.add('active');
+    state.styleIdx = i;
+  });
+  styleGrid.appendChild(cell);
+  renderMask(canvas, i, {seed:12345, scaleFactor:1, contrast:0.5, soft:0.15, rot:0, invert:false});
+});
+
+function bindSlider(id, key, suffix){
+  const el = document.getElementById(id);
+  const out = document.getElementById('v_'+id);
+  const upd = ()=>{ state[key]=Number(el.value); out.textContent = el.value+(suffix||''); };
+  el.addEventListener('input', upd);
+  upd();
+}
+bindSlider('scale','scale','%');
+bindSlider('amount','amount','%');
+bindSlider('contrast','contrast','%');
+bindSlider('soft','soft','%');
+bindSlider('rot','rot','°');
+
+document.getElementById('invert').addEventListener('change', e=> state.invert = e.target.checked);
+document.getElementById('replaceMode').addEventListener('change', e=> state.replaceMode = e.target.checked);
+
+document.getElementById('randomizeBtn').addEventListener('click', ()=>{
+  state.seed = Math.floor(Math.random()*1e9);
+  setStatus('New seed: '+state.seed);
+});
+
+/* ---------- copy / paste / saved presets (localStorage) ---------- */
+let clipboard = null;
+document.getElementById('copyBtn').addEventListener('click', ()=>{
+  clipboard = JSON.parse(JSON.stringify(state));
+  setStatus('Settings copied.');
+});
+document.getElementById('pasteBtn').addEventListener('click', ()=>{
+  if(!clipboard){ setStatus('Nothing copied yet.', true); return; }
+  Object.assign(state, clipboard);
+  syncUIFromState();
+  setStatus('Settings pasted.');
+});
+
+function syncUIFromState(){
+  document.querySelectorAll('.style-cell').forEach(c=>c.classList.toggle('active', Number(c.dataset.idx)===state.styleIdx));
+  ['scale','amount','contrast','soft','rot'].forEach(id=>{
+    document.getElementById(id).value = state[id];
+    document.getElementById('v_'+id).textContent = state[id] + (id==='rot'?'°':'%');
+  });
+  document.getElementById('invert').checked = state.invert;
+  document.getElementById('replaceMode').checked = state.replaceMode;
+}
+
+const PRESET_KEY = 'distressor_presets_v1';
+function loadPresets(){ try{ return JSON.parse(localStorage.getItem(PRESET_KEY))||{}; }catch(e){ return {}; } }
+function savePresets(p){ localStorage.setItem(PRESET_KEY, JSON.stringify(p)); }
+function refreshPresetSelect(){
+  const sel = document.getElementById('savedPresets');
+  const presets = loadPresets();
+  sel.innerHTML = '<option value="">— saved presets —</option>';
+  Object.keys(presets).forEach(name=>{
+    const opt = document.createElement('option'); opt.value=name; opt.textContent=name;
+    sel.appendChild(opt);
+  });
+}
+refreshPresetSelect();
+document.getElementById('savePresetBtn').addEventListener('click', ()=>{
+  const name = prompt('Save current settings as:');
+  if(!name) return;
+  const presets = loadPresets();
+  presets[name] = JSON.parse(JSON.stringify(state));
+  savePresets(presets);
+  refreshPresetSelect();
+  document.getElementById('savedPresets').value = name;
+  setStatus('Preset "'+name+'" saved.');
+});
+document.getElementById('deletePresetBtn').addEventListener('click', ()=>{
+  const sel = document.getElementById('savedPresets');
+  if(!sel.value) return;
+  const presets = loadPresets();
+  delete presets[sel.value];
+  savePresets(presets);
+  refreshPresetSelect();
+  setStatus('Preset deleted.');
+});
+document.getElementById('savedPresets').addEventListener('change', (e)=>{
+  if(!e.target.value) return;
+  const presets = loadPresets();
+  Object.assign(state, presets[e.target.value]);
+  syncUIFromState();
+  setStatus('Loaded preset "'+e.target.value+'".');
+});
+
+/* =========================================================================
+   PHOTOPEA BRIDGE
+   Plugins talk to Photopea by posting a plain string of script code to
+   window.parent; Photopea executes it and streams back any values passed to
+   app.echoToOE(...), plus binary results from Document.saveToOE(...), each
+   followed by a final "done" message. See photopea.com/api and the
+   discussion at github.com/photopea/photopea/issues/7937.
+   ========================================================================= */
+let pending = [];
+window.addEventListener('message', (ev)=>{
+  if(ev.source !== window.parent) return;
+  if(pending.length===0) return;
+  const cur = pending[0];
+  if(ev.data === 'done'){
+    pending.shift();
+    cur.resolve(cur.results);
+  } else {
+    cur.results.push(ev.data);
+  }
+});
+function runScript(script, timeoutMs){
+  return new Promise((resolve,reject)=>{
+    const entry = {resolve, results:[]};
+    pending.push(entry);
+    const t = setTimeout(()=>{
+      const i = pending.indexOf(entry);
+      if(i!==-1){ pending.splice(i,1); reject(new Error('Photopea did not respond (timeout). Is a document open?')); }
+    }, timeoutMs||20000);
+    const wrappedResolve = entry.resolve;
+    entry.resolve = (r)=>{ clearTimeout(t); wrappedResolve(r); };
+    window.parent.postMessage(script, '*');
+  });
+}
+
+function setStatus(msg, isErr, isOk){
+  const el = document.getElementById('status');
+  el.textContent = msg;
+  el.className = isErr ? 'err' : (isOk ? 'ok' : '');
+}
+
+function jsStr(s){ return JSON.stringify(String(s)); }
+
+/* ---------- main apply flow ---------- */
+const applyBtn = document.getElementById('applyBtn');
+
+async function applyDistress(){
+  applyBtn.disabled = true;
+  try{
+    setStatus('Reading active layer…');
+    const token = '__distress_' + Date.now() + '_' + Math.floor(Math.random()*1e6) + '__';
+
+    const scriptTag = `
+      var doc = app.activeDocument;
+      var lyr = doc.activeLayer;
+      app.echoToOE(JSON.stringify({name: lyr.name, w: doc.width, h: doc.height}));
+      lyr.name = ${jsStr(token)};
+    `;
+    const resTag = await runScript(scriptTag);
+    if(!resTag.length) throw new Error('No document / layer selected in Photopea.');
+    const info = JSON.parse(resTag[0]);
+    const w = Math.max(1, Math.round(info.w));
+    const h = Math.max(1, Math.round(info.h));
+    const origName = info.name;
+
+    setStatus('Isolating layer pixels…');
+    const scriptIsolate = `
+      var doc = app.activeDocument;
+      var target = doc.layers.getByName(${jsStr(token)});
+      var clone = doc.duplicate();
+      var cTarget = clone.layers.getByName(${jsStr(token)});
+      for (var i = clone.layers.length - 1; i >= 0; i--) {
+        if (clone.layers[i] !== cTarget) { try { clone.layers[i].remove(); } catch(e){} }
+      }
+      clone.saveToOE("png");
+      clone.close(SaveOptions.DONOTSAVECHANGES);
+    `;
+    const resIsolate = await runScript(scriptIsolate, 30000);
+    const pngBuf = resIsolate.find(r => r instanceof ArrayBuffer || (r && r.byteLength!==undefined));
+    if(!pngBuf) throw new Error('Photopea did not return layer pixel data.');
+
+    setStatus('Generating '+STYLES[state.styleIdx].name+' mask…');
+    const layerBitmap = await blobToImage(new Blob([pngBuf], {type:'image/png'}));
+
+    const work = document.createElement('canvas'); work.width=w; work.height=h;
+    const wctx = work.getContext('2d');
+    wctx.drawImage(layerBitmap, 0, 0, w, h);
+    const layerData = wctx.getImageData(0,0,w,h);
+
+    const maskCanvas = document.createElement('canvas'); maskCanvas.width=w; maskCanvas.height=h;
+    renderMask(maskCanvas, state.styleIdx, currentParams());
+    const maskData = maskCanvas.getContext('2d').getImageData(0,0,w,h);
+
+    const amt = state.amount/100;
+    const ld = layerData.data, md = maskData.data;
+    for(let i=0; i<ld.length; i+=4){
+      const maskV = md[i]/255;           // 1 = keep, 0 = erode
+      const mult = (1-amt) + amt*maskV;  // amount blends toward full mask effect
+      ld[i+3] = Math.round(ld[i+3] * mult);
+    }
+    wctx.putImageData(layerData, 0, 0);
+    const dataURI = work.toDataURL('image/png');
+
+    setStatus('Sending result back to Photopea…');
+    const resultName = origName + ' (Distressed)';
+    const scriptFinish = `
+      var targetDoc = app.activeDocument;
+      var origLayer = targetDoc.layers.getByName(${jsStr(token)});
+      app.open(${jsStr(dataURI)}, null, true);
+      var srcDoc = app.activeDocument;
+      var newLayer = srcDoc.activeLayer;
+      newLayer.name = ${jsStr(resultName)};
+      newLayer.duplicate(targetDoc, ElementPlacement.PLACEATBEGINNING);
+      srcDoc.close(SaveOptions.DONOTSAVECHANGES);
+      app.activeDocument = targetDoc;
+      origLayer.name = ${jsStr(origName)};
+      ${state.replaceMode ? 'try{ origLayer.remove(); }catch(e){}' : 'origLayer.visible = false;'}
+      app.echoToOE("applied");
+    `;
+    await runScript(scriptFinish, 30000);
+    setStatus('Distress applied to "'+resultName+'".', false, true);
+
+  } catch(err){
+    console.error(err);
+    setStatus('Error: '+(err && err.message ? err.message : err), true);
+  } finally {
+    applyBtn.disabled = false;
+  }
+}
+
+function blobToImage(blob){
+  return new Promise((resolve,reject)=>{
+    const url = URL.createObjectURL(blob);
+    const img = new Image();
+    img.onload = ()=>{ URL.revokeObjectURL(url); resolve(img); };
+    img.onerror = (e)=>{ URL.revokeObjectURL(url); reject(new Error('Could not decode returned image data.')); };
+    img.src = url;
+  });
+}
+
+applyBtn.addEventListener('click', applyDistress);
+
+/* ---------- initial ping so the panel shows something useful ---------- */
+(async function init(){
+  try{
+    const res = await runScript(`app.echoToOE(JSON.stringify({docs: app.documents.length}));`, 8000);
+    const info = JSON.parse(res[0]);
+    if(info.docs>0) setStatus('Ready. '+info.docs+' document(s) open.');
+    else setStatus('Open a document in Photopea, then select a layer to distress.', true);
+  }catch(e){
+    setStatus('Could not reach Photopea yet — try clicking Apply once a document is open.', true);
+  }
+})();
+</script>
+</body>
+</html>
