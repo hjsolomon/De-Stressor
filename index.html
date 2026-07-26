@@ -726,7 +726,7 @@ function runScript(script, timeoutMs){
       // stay in place so the eventual (or never-coming) 'done' for THIS call
       // gets consumed here, not misapplied to whatever gets queued next.
       reject(new Error('Photopea did not respond (timeout). Is a document open, with a layer selected?'));
-    }, timeoutMs||20000);
+    }, timeoutMs||120000);
     window.parent.postMessage(script, '*');
   });
 }
