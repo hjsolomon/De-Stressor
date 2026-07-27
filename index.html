@@ -781,41 +781,67 @@ async function applyDistress(){
     const origName = info.name;
 
     setStatus('Isolating layer pixels…');
-    const scriptIsolate = `
+    const scriptHide = `
       try {
         var doc = app.activeDocument;
         var target = doc.layers.getByName(${jsStr(token)});
         if (!target) throw "Could not find the layer to isolate.";
-        app.echoToOE("MARKER:found-target:" + target.name);
-        // Both Document.duplicate() and ArtLayer.duplicate() crash Photopea's
-        // internal engine on this document (uncaught errors deep inside its
-        // own code, escaping any try/catch on our side). So: no duplicate()
-        // calls at all. Instead, hide every other top-level layer, export
-        // the composite (= just our target layer), then restore visibility.
         var savedVis = [];
         for (var i = 0; i < doc.layers.length; i++) {
           savedVis.push(doc.layers[i].visible);
           doc.layers[i].visible = (doc.layers[i] === target);
         }
-        app.echoToOE("MARKER:hidden-siblings:" + doc.layers.length + "-layers");
-        try {
-          doc.saveToOE("png");
-          app.echoToOE("MARKER:saved");
-        } finally {
-          for (var j = 0; j < doc.layers.length; j++) {
-            doc.layers[j].visible = savedVis[j];
-          }
-          app.echoToOE("MARKER:restored-visibility");
-        }
+        app.echoToOE(JSON.stringify({ok:true, savedVis: savedVis}));
       } catch(e) {
         app.echoToOE(JSON.stringify({ok:false, error: String(e)}));
       }
     `;
-    const resIsolate = await runScript(scriptIsolate, 30000);
-    const errIsolate = resIsolate.find(r => typeof r === 'string' && r.indexOf('"ok":false') !== -1);
-    if(errIsolate) throw new Error(JSON.parse(errIsolate).error || 'Photopea failed to isolate the layer.');
-    const pngBuf = resIsolate.find(r => r instanceof ArrayBuffer || (r && r.byteLength!==undefined));
-    if(!pngBuf) throw new Error('Photopea did not return layer pixel data.');
+    const resHide = await runScript(scriptHide, 15000);
+    if(!resHide.length) throw new Error('Photopea sent no data back while hiding sibling layers.');
+    const hideInfo = JSON.parse(resHide[0]);
+    if(!hideInfo.ok) throw new Error(hideInfo.error || 'Failed to isolate the layer (hide step).');
+    const savedVis = hideInfo.savedVis;
+
+    let pngBuf = null, exportError = null;
+    try {
+      const scriptExport = `
+        try {
+          app.activeDocument.saveToOE("png");
+        } catch(e) {
+          app.echoToOE(JSON.stringify({ok:false, error: String(e)}));
+        }
+      `;
+      const resExport = await runScript(scriptExport, 30000);
+      const errExport = resExport.find(r => typeof r === 'string' && r.indexOf('"ok":false') !== -1);
+      if(errExport){
+        exportError = JSON.parse(errExport).error || 'Photopea failed to export the isolated layer.';
+      } else {
+        pngBuf = resExport.find(r => r instanceof ArrayBuffer || (r && r.byteLength!==undefined));
+        if(!pngBuf) exportError = 'Photopea did not return layer pixel data.';
+      }
+    } finally {
+      // Restore visibility in its own dedicated round-trip, regardless of
+      // whether the export above succeeded — this way a failure exporting
+      // doesn't also leave the document's layers stuck hidden.
+      const scriptRestore = `
+        try {
+          var doc = app.activeDocument;
+          var vis = ${JSON.stringify(savedVis)};
+          for (var j = 0; j < doc.layers.length && j < vis.length; j++) {
+            doc.layers[j].visible = vis[j];
+          }
+          app.echoToOE("restored");
+        } catch(e) {
+          app.echoToOE(JSON.stringify({ok:false, error: String(e)}));
+        }
+      `;
+      try {
+        await runScript(scriptRestore, 15000);
+      } catch(e2){
+        console.error('[DeStressor] failed to restore layer visibility:', e2);
+      }
+    }
+    if(exportError) throw new Error(exportError);
     setStatus('Isolated layer: '+pngBuf.byteLength+' bytes received. Generating '+STYLES[state.styleIdx].name+' mask…');
 
     const layerBitmap = await blobToImage(new Blob([pngBuf], {type:'image/png'}));
