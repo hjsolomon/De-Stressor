@@ -141,6 +141,7 @@
   <header>
     <h1>DE<span class="dot">·</span>STRESSOR</h1>
     <p>Procedural wear &amp; grunge masking for the active layer, applied through transparency — non-destructive, undoable, no real-world texture photography required.</p>
+    <p style="color:var(--accent2); font-weight:600;">Before clicking Apply: hide every other layer in Photopea by hand (click their eye icons off) so only your target layer is visible, then select that layer and click Apply. You can turn the other layers back on once it's done.</p>
   </header>
 
   <div class="scroll">
@@ -780,83 +781,20 @@ async function applyDistress(){
     const h = Math.max(1, Math.round(info.h));
     const origName = info.name;
 
-    setStatus('Sanity check: exporting untouched composite…');
-    const scriptSanity = `
+    setStatus('Exporting visible layer pixels…');
+    const scriptExport = `
       try {
         app.activeDocument.saveToOE("png");
       } catch(e) {
         app.echoToOE(JSON.stringify({ok:false, error: String(e)}));
       }
     `;
-    const resSanity = await runScript(scriptSanity, 30000);
-    const sanityBuf = resSanity.find(r => r instanceof ArrayBuffer || (r && r.byteLength!==undefined));
-    console.log('[DeStressor] SANITY CHECK — full untouched composite export size:', sanityBuf ? sanityBuf.byteLength : '(none received)');
-
-    setStatus('Isolating layer pixels…');
-    const scriptHide = `
-      try {
-        var doc = app.activeDocument;
-        var savedVis = [];
-        var foundTarget = false;
-        for (var i = 0; i < doc.layers.length; i++) {
-          var isTarget = (doc.layers[i].name === ${jsStr(token)});
-          if (isTarget) foundTarget = true;
-          savedVis.push(doc.layers[i].visible);
-          doc.layers[i].visible = isTarget;
-        }
-        if (!foundTarget) throw "Could not find the layer to isolate (by name).";
-        app.echoToOE(JSON.stringify({ok:true, savedVis: savedVis}));
-      } catch(e) {
-        app.echoToOE(JSON.stringify({ok:false, error: String(e)}));
-      }
-    `;
-    const resHide = await runScript(scriptHide, 15000);
-    if(!resHide.length) throw new Error('Photopea sent no data back while hiding sibling layers.');
-    const hideInfo = JSON.parse(resHide[0]);
-    if(!hideInfo.ok) throw new Error(hideInfo.error || 'Failed to isolate the layer (hide step).');
-    const savedVis = hideInfo.savedVis;
-
-    let pngBuf = null, exportError = null;
-    try {
-      const scriptExport = `
-        try {
-          app.activeDocument.saveToOE("png");
-        } catch(e) {
-          app.echoToOE(JSON.stringify({ok:false, error: String(e)}));
-        }
-      `;
-      const resExport = await runScript(scriptExport, 30000);
-      const errExport = resExport.find(r => typeof r === 'string' && r.indexOf('"ok":false') !== -1);
-      if(errExport){
-        exportError = JSON.parse(errExport).error || 'Photopea failed to export the isolated layer.';
-      } else {
-        pngBuf = resExport.find(r => r instanceof ArrayBuffer || (r && r.byteLength!==undefined));
-        if(!pngBuf) exportError = 'Photopea did not return layer pixel data.';
-      }
-    } finally {
-      // Restore visibility in its own dedicated round-trip, regardless of
-      // whether the export above succeeded — this way a failure exporting
-      // doesn't also leave the document's layers stuck hidden.
-      const scriptRestore = `
-        try {
-          var doc = app.activeDocument;
-          var vis = ${JSON.stringify(savedVis)};
-          for (var j = 0; j < doc.layers.length && j < vis.length; j++) {
-            doc.layers[j].visible = vis[j];
-          }
-          app.echoToOE("restored");
-        } catch(e) {
-          app.echoToOE(JSON.stringify({ok:false, error: String(e)}));
-        }
-      `;
-      try {
-        await runScript(scriptRestore, 15000);
-      } catch(e2){
-        console.error('[DeStressor] failed to restore layer visibility:', e2);
-      }
-    }
-    if(exportError) throw new Error(exportError);
-    setStatus('Full composite: '+(sanityBuf?sanityBuf.byteLength:'?')+' bytes. Isolated layer: '+pngBuf.byteLength+' bytes. Generating '+STYLES[state.styleIdx].name+' mask…');
+    const resExport = await runScript(scriptExport, 30000);
+    const errExport = resExport.find(r => typeof r === 'string' && r.indexOf('"ok":false') !== -1);
+    if(errExport) throw new Error(JSON.parse(errExport).error || 'Photopea failed to export the layer.');
+    const pngBuf = resExport.find(r => r instanceof ArrayBuffer || (r && r.byteLength!==undefined));
+    if(!pngBuf) throw new Error('Photopea did not return any pixel data.');
+    setStatus('Exported: '+pngBuf.byteLength+' bytes. Generating '+STYLES[state.styleIdx].name+' mask…');
 
     const layerBitmap = await blobToImage(new Blob([pngBuf], {type:'image/png'}));
 
@@ -884,7 +822,7 @@ async function applyDistress(){
     for(let i=3;i<ld.length;i+=4){ if(ld[i] > 8) resultOpaquePx++; }
     setStatus('Source had '+sourceOpaquePx+' opaque px, result has '+resultOpaquePx+' opaque px (of '+(w*h)+' total). Sending result back to Photopea…');
     if(sourceOpaquePx === 0){
-      throw new Error('Isolation produced a blank image (0 opaque px of '+(w*h)+'). For comparison, the untouched full composite exported as '+(sanityBuf?sanityBuf.byteLength:'?')+' bytes vs '+pngBuf.byteLength+' bytes isolated.');
+      throw new Error('The exported image was fully transparent. Before clicking Apply, hide every other layer in Photopea by hand so only your target layer is showing, then try again.');
     }
     const resultName = origName + ' (Distressed)';
     const scriptFinish = `
