@@ -780,6 +780,18 @@ async function applyDistress(){
     const h = Math.max(1, Math.round(info.h));
     const origName = info.name;
 
+    setStatus('Sanity check: exporting untouched composite…');
+    const scriptSanity = `
+      try {
+        app.activeDocument.saveToOE("png");
+      } catch(e) {
+        app.echoToOE(JSON.stringify({ok:false, error: String(e)}));
+      }
+    `;
+    const resSanity = await runScript(scriptSanity, 30000);
+    const sanityBuf = resSanity.find(r => r instanceof ArrayBuffer || (r && r.byteLength!==undefined));
+    console.log('[DeStressor] SANITY CHECK — full untouched composite export size:', sanityBuf ? sanityBuf.byteLength : '(none received)');
+
     setStatus('Isolating layer pixels…');
     const scriptHide = `
       try {
@@ -842,7 +854,7 @@ async function applyDistress(){
       }
     }
     if(exportError) throw new Error(exportError);
-    setStatus('Isolated layer: '+pngBuf.byteLength+' bytes received. Generating '+STYLES[state.styleIdx].name+' mask…');
+    setStatus('Full composite: '+(sanityBuf?sanityBuf.byteLength:'?')+' bytes. Isolated layer: '+pngBuf.byteLength+' bytes. Generating '+STYLES[state.styleIdx].name+' mask…');
 
     const layerBitmap = await blobToImage(new Blob([pngBuf], {type:'image/png'}));
 
@@ -870,7 +882,7 @@ async function applyDistress(){
     for(let i=3;i<ld.length;i+=4){ if(ld[i] > 8) resultOpaquePx++; }
     setStatus('Source had '+sourceOpaquePx+' opaque px, result has '+resultOpaquePx+' opaque px (of '+(w*h)+' total). Sending result back to Photopea…');
     if(sourceOpaquePx === 0){
-      throw new Error('The layer Photopea sent back was fully transparent — the isolation step produced a blank image. See the note below.');
+      throw new Error('Isolation produced a blank image (0 opaque px of '+(w*h)+'). For comparison, the untouched full composite exported as '+(sanityBuf?sanityBuf.byteLength:'?')+' bytes vs '+pngBuf.byteLength+' bytes isolated.');
     }
     const resultName = origName + ' (Distressed)';
     const scriptFinish = `
