@@ -801,18 +801,20 @@ async function applyDistress(){
     if(errIsolate) throw new Error(JSON.parse(errIsolate).error || 'Photopea failed to isolate the layer.');
     const pngBuf = resIsolate.find(r => r instanceof ArrayBuffer || (r && r.byteLength!==undefined));
     if(!pngBuf) throw new Error('Photopea did not return layer pixel data.');
+    setStatus('Isolated layer: '+pngBuf.byteLength+' bytes received. Generating '+STYLES[state.styleIdx].name+' mask…');
 
-    setStatus('Generating '+STYLES[state.styleIdx].name+' mask…');
     const layerBitmap = await blobToImage(new Blob([pngBuf], {type:'image/png'}));
 
     const work = document.createElement('canvas'); work.width=w; work.height=h;
-    const wctx = work.getContext('2d');
+    const wctx = work.getContext('2d', {willReadFrequently:true});
     wctx.drawImage(layerBitmap, 0, 0, w, h);
     const layerData = wctx.getImageData(0,0,w,h);
+    let sourceOpaquePx = 0;
+    for(let i=3;i<layerData.data.length;i+=4){ if(layerData.data[i] > 8) sourceOpaquePx++; }
 
     const maskCanvas = document.createElement('canvas'); maskCanvas.width=w; maskCanvas.height=h;
     renderMask(maskCanvas, state.styleIdx, currentParams());
-    const maskData = maskCanvas.getContext('2d').getImageData(0,0,w,h);
+    const maskData = maskCanvas.getContext('2d', {willReadFrequently:true}).getImageData(0,0,w,h);
 
     const amt = state.amount/100;
     const ld = layerData.data, md = maskData.data;
@@ -823,8 +825,12 @@ async function applyDistress(){
     }
     wctx.putImageData(layerData, 0, 0);
     const dataURI = work.toDataURL('image/png');
-
-    setStatus('Sending result back to Photopea…');
+    let resultOpaquePx = 0;
+    for(let i=3;i<ld.length;i+=4){ if(ld[i] > 8) resultOpaquePx++; }
+    setStatus('Source had '+sourceOpaquePx+' opaque px, result has '+resultOpaquePx+' opaque px (of '+(w*h)+' total). Sending result back to Photopea…');
+    if(sourceOpaquePx === 0){
+      throw new Error('The layer Photopea sent back was fully transparent — the isolation step produced a blank image. See the note below.');
+    }
     const resultName = origName + ' (Distressed)';
     const scriptFinish = `
       try {
