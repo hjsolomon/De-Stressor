@@ -748,6 +748,7 @@ const applyBtn = document.getElementById('applyBtn');
 
 async function applyDistress(){
   applyBtn.disabled = true;
+  let cleanupToken = null, cleanupOrigName = null;
   try{
     setStatus('Reading active layer…');
     const token = '__distress_' + Date.now() + '_' + Math.floor(Math.random()*1e6) + '__';
@@ -758,6 +759,12 @@ async function applyDistress(){
         if (!doc) throw "No document is open in Photopea.";
         var lyr = doc.activeLayer;
         if (!lyr) throw "No layer is selected in Photopea.";
+        if (typeof lyr.kind !== "undefined" && lyr.kind !== LayerKind.NORMAL) {
+          throw "The active layer (\\"" + lyr.name + "\\") isn't a normal pixel layer — it looks like an adjustment layer, text layer, or similar (kind: " + lyr.kind + "). De-Stressor needs a raster/image layer selected, since those don't have pixel content of their own to distress.";
+        }
+        if (typeof lyr.duplicate !== "function") {
+          throw "The active layer (\\"" + lyr.name + "\\") doesn't support the operations De-Stressor needs (it may be a group). Select a normal pixel layer inside it instead.";
+        }
         app.echoToOE(JSON.stringify({ok:true, name: lyr.name, w: doc.width, h: doc.height}));
         lyr.name = ${jsStr(token)};
       } catch(e) {
@@ -768,6 +775,7 @@ async function applyDistress(){
     if(!resTag.length) throw new Error('Photopea sent no data back — try clicking Apply again.');
     const info = JSON.parse(resTag[0]);
     if(!info.ok) throw new Error(info.error || 'No document / layer selected in Photopea.');
+    cleanupToken = token; cleanupOrigName = info.name; // rename has now happened in Photopea — restore this if we bail out later
     const w = Math.max(1, Math.round(info.w));
     const h = Math.max(1, Math.round(info.h));
     const origName = info.name;
@@ -778,20 +786,23 @@ async function applyDistress(){
         var doc = app.activeDocument;
         var target = doc.layers.getByName(${jsStr(token)});
         if (!target) throw "Could not find the layer to isolate.";
-        // Avoid doc.duplicate() — it throws an uncaught internal error in
-        // Photopea for some documents. Also avoid a hide-siblings/export
-        // trick — Photopea doesn't reliably recomposite in the same script
-        // tick, so that produced a blank export. Instead: duplicate just
-        // the layer (ArtLayer.duplicate, a different / more stable API,
-        // already used successfully below in the "send result back" step)
-        // into a fresh transparent document of the same pixel size.
-        var isoDoc = app.documents.add(doc.width, doc.height, doc.resolution, "iso_tmp", NewDocumentMode.RGB, DocumentFill.TRANSPARENT);
-        var isoLayer = target.duplicate(isoDoc, ElementPlacement.PLACEATBEGINNING);
-        for (var i = isoDoc.layers.length - 1; i >= 0; i--) {
-          if (isoDoc.layers[i] !== isoLayer) { try { isoDoc.layers[i].remove(); } catch(e){} }
+        // Both Document.duplicate() and ArtLayer.duplicate() crash Photopea's
+        // internal engine on this document (uncaught errors deep inside its
+        // own code, escaping any try/catch on our side). So: no duplicate()
+        // calls at all. Instead, hide every other top-level layer, export
+        // the composite (= just our target layer), then restore visibility.
+        var savedVis = [];
+        for (var i = 0; i < doc.layers.length; i++) {
+          savedVis.push(doc.layers[i].visible);
+          doc.layers[i].visible = (doc.layers[i] === target);
         }
-        isoDoc.saveToOE("png");
-        isoDoc.close(SaveOptions.DONOTSAVECHANGES);
+        try {
+          doc.saveToOE("png");
+        } finally {
+          for (var j = 0; j < doc.layers.length; j++) {
+            doc.layers[j].visible = savedVis[j];
+          }
+        }
       } catch(e) {
         app.echoToOE(JSON.stringify({ok:false, error: String(e)}));
       }
@@ -833,20 +844,30 @@ async function applyDistress(){
     }
     const resultName = origName + ' (Distressed)';
     const scriptFinish = `
+      var targetDoc = app.activeDocument;
+      var srcDoc = null;
       try {
-        var targetDoc = app.activeDocument;
         var origLayer = targetDoc.layers.getByName(${jsStr(token)});
+        if (!origLayer) throw "Could not find the original layer — it may have been renamed or removed. (name: " + ${jsStr(origName)} + ")";
         app.open(${jsStr(dataURI)}, null, true);
-        var srcDoc = app.activeDocument;
+        srcDoc = app.activeDocument;
+        if (srcDoc === targetDoc) throw "Opening the processed image did not create a new document as expected.";
         var newLayer = srcDoc.activeLayer;
+        if (!newLayer) throw "The processed image opened with no active layer.";
         newLayer.name = ${jsStr(resultName)};
         newLayer.duplicate(targetDoc, ElementPlacement.PLACEATBEGINNING);
         srcDoc.close(SaveOptions.DONOTSAVECHANGES);
+        srcDoc = null;
         app.activeDocument = targetDoc;
         origLayer.name = ${jsStr(origName)};
         ${state.replaceMode ? 'try{ origLayer.remove(); }catch(e){}' : 'origLayer.visible = false;'}
         app.echoToOE(JSON.stringify({ok:true}));
       } catch(e) {
+        // Always clean up the temp document (if it's still open) before
+        // reporting the error, so a failure here doesn't leave an orphaned
+        // empty document sitting in Photopea's tab bar.
+        try { if (srcDoc) { app.activeDocument = srcDoc; srcDoc.close(SaveOptions.DONOTSAVECHANGES); } } catch(e2) {}
+        try { app.activeDocument = targetDoc; } catch(e3) {}
         app.echoToOE(JSON.stringify({ok:false, error: String(e)}));
       }
     `;
@@ -858,6 +879,19 @@ async function applyDistress(){
   } catch(err){
     console.error(err);
     setStatus('Error: '+(err && err.message ? err.message : err), true);
+    if(cleanupToken && cleanupOrigName){
+      try{
+        await runScript(`
+          try {
+            var doc = app.activeDocument;
+            var lyr = doc.layers.getByName(${jsStr(cleanupToken)});
+            if (lyr) { lyr.name = ${jsStr(cleanupOrigName)}; }
+          } catch(e) {}
+        `, 8000);
+      }catch(e2){
+        console.error('[DeStressor] could not restore original layer name — it may still be named', cleanupToken, e2);
+      }
+    }
   } finally {
     applyBtn.disabled = false;
   }
