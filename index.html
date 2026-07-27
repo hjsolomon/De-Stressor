@@ -809,11 +809,25 @@ async function applyDistress(){
     renderMask(maskCanvas, state.styleIdx, currentParams());
     const maskData = maskCanvas.getContext('2d', {willReadFrequently:true}).getImageData(0,0,w,h);
 
-    const amt = state.amount/100;
+    const amt = state.amount/100;       // 0..1 — how much of the area erodes away
+    const softness = state.soft/100;    // 0..1 — width of the transition band
+    // Threshold ("waterline") erosion instead of a linear blend: pixels whose
+    // mask value falls below the Amount threshold go fully transparent;
+    // pixels above stay fully intact. This is what makes real distress
+    // effects read as "some of it is actually gone" rather than a uniform
+    // semi-transparent haze over everything.
+    const edgeBand = 0.015 + softness*0.12;
+    const loEdge = amt - edgeBand, hiEdge = amt + edgeBand;
     const ld = layerData.data, md = maskData.data;
     for(let i=0; i<ld.length; i+=4){
       const maskV = md[i]/255;           // 1 = keep, 0 = erode
-      const mult = (1-amt) + amt*maskV;  // amount blends toward full mask effect
+      let mult;
+      if(maskV <= loEdge) mult = 0;
+      else if(maskV >= hiEdge) mult = 1;
+      else {
+        const t = (maskV-loEdge)/(hiEdge-loEdge);
+        mult = t*t*(3-2*t); // smoothstep
+      }
       ld[i+3] = Math.round(ld[i+3] * mult);
     }
     wctx.putImageData(layerData, 0, 0);
@@ -831,19 +845,21 @@ async function applyDistress(){
       try {
         var origLayer = targetDoc.layers.getByName(${jsStr(token)});
         if (!origLayer) throw "Could not find the original layer — it may have been renamed or removed. (name: " + ${jsStr(origName)} + ")";
-        app.open(${jsStr(dataURI)}, null, true);
+        app.open(${jsStr(dataURI)}, null, false);
         srcDoc = app.activeDocument;
         if (srcDoc === targetDoc) throw "Opening the processed image did not create a new document as expected.";
         var newLayer = srcDoc.activeLayer;
         if (!newLayer) throw "The processed image opened with no active layer.";
         newLayer.name = ${jsStr(resultName)};
-        newLayer.duplicate(targetDoc, ElementPlacement.PLACEATBEGINNING);
+        var placedLayer = newLayer.duplicate(targetDoc, ElementPlacement.PLACEATBEGINNING);
         srcDoc.close(SaveOptions.DONOTSAVECHANGES);
         srcDoc = null;
         app.activeDocument = targetDoc;
         origLayer.name = ${jsStr(origName)};
         ${state.replaceMode ? 'try{ origLayer.remove(); }catch(e){}' : 'origLayer.visible = false;'}
-        app.echoToOE(JSON.stringify({ok:true}));
+        var pb = null;
+        try { var pl = targetDoc.activeLayer; pb = [pl.bounds[0].value, pl.bounds[1].value, pl.bounds[2].value, pl.bounds[3].value]; } catch(eb) {}
+        app.echoToOE(JSON.stringify({ok:true, placedBounds: pb, docSize: [targetDoc.width, targetDoc.height]}));
       } catch(e) {
         // Always clean up the temp document (if it's still open) before
         // reporting the error, so a failure here doesn't leave an orphaned
@@ -856,7 +872,9 @@ async function applyDistress(){
     const resFinish = await runScript(scriptFinish, 30000);
     const finishInfo = resFinish.length ? JSON.parse(resFinish[resFinish.length-1]) : null;
     if(!finishInfo || !finishInfo.ok) throw new Error((finishInfo && finishInfo.error) || 'Photopea did not confirm the result — check the document, it may have partially applied.');
-    setStatus('Distress applied to "'+resultName+'".', false, true);
+    console.log('[DeStressor] placed layer bounds:', finishInfo.placedBounds, 'doc size:', finishInfo.docSize);
+    const boundsStr = finishInfo.placedBounds ? ('bounds '+finishInfo.placedBounds.join(',')+' vs doc '+finishInfo.docSize.join('x')) : 'bounds unavailable';
+    setStatus('Distress applied to "'+resultName+'". ('+boundsStr+')', false, true);
 
   } catch(err){
     console.error(err);
