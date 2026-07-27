@@ -152,12 +152,12 @@
     <div class="section-label"><span class="idx">02</span> CONTROLS</div>
 
     <div class="ctrl-row">
-      <div class="ctrl-head"><label>Scale</label><span class="val" id="v_scale">100%</span></div>
-      <input type="range" id="scale" min="10" max="400" value="100">
+      <div class="ctrl-head"><label>Scale</label><span class="val" id="v_scale">60%</span></div>
+      <input type="range" id="scale" min="10" max="400" value="60">
     </div>
     <div class="ctrl-row">
-      <div class="ctrl-head"><label>Amount</label><span class="val" id="v_amount">40%</span></div>
-      <input type="range" id="amount" min="0" max="100" value="40">
+      <div class="ctrl-head"><label>Amount</label><span class="val" id="v_amount">18%</span></div>
+      <input type="range" id="amount" min="0" max="100" value="18">
     </div>
     <div class="ctrl-row">
       <div class="ctrl-head"><label>Contrast</label><span class="val" id="v_contrast">50%</span></div>
@@ -286,11 +286,16 @@ function fillFromField(ctx,w,h,fieldFn){
   ctx.putImageData(img,0,0);
 }
 
-// 1. Paper Grain — fine fbm noise, high frequency
+// 1. Paper Grain — subtle large-scale mottling + real per-pixel fine grain
 STYLES.push({name:"Paper Grain", gen(ctx,w,h,p){
   const rng = mulberry32(p.seed);
-  const {layers,weights} = baseNoiseCanvas(w,h,rng,3,p.scaleFactor*0.5);
-  fillFromField(ctx,w,h,(u,v)=> 0.5 + (fbm(layers,u,v,weights)-0.5)*1.6);
+  const {layers,weights} = baseNoiseCanvas(w,h,rng,2,p.scaleFactor*1.5);
+  const grainRng = mulberry32(p.seed^0x51ed270b);
+  fillFromField(ctx,w,h,(u,v)=>{
+    const mottle = fbm(layers,u,v,weights);   // gentle large-scale variation
+    const grain = grainRng();                  // true per-pixel independent noise
+    return mottle*0.35 + grain*0.65;            // grain dominates — this is what reads as "grain" rather than "clouds"
+  });
 }});
 
 // 2. Cracked Paint — ridged noise thresholded into vein-like cracks
@@ -305,13 +310,20 @@ STYLES.push({name:"Cracked Paint", gen(ctx,w,h,p){
   });
 }});
 
-// 3. Rust & Corrosion — blotchy low-freq noise w/ speckle overlay
+// 3. Rust & Corrosion — blotchy noise stretched along a streak axis (gravity drip) + speckle
 STYLES.push({name:"Rust", gen(ctx,w,h,p){
   const rng = mulberry32(p.seed);
   const {layers,weights} = baseNoiseCanvas(w,h,rng,3,p.scaleFactor*1.4);
   const speck = mulberry32(p.seed^0x9e3779b9);
-  fillFromField(ctx,w,h,(u,v)=>{
-    let n = fbm(layers,u,v,weights);
+  const rot = (p.rot||0)*Math.PI/180;
+  const cosr=Math.cos(rot), sinr=Math.sin(rot);
+  fillFromField(ctx,w,h,(u,v,x,y)=>{
+    // Rotate into "streak space" (default: vertical, like gravity-driven bleed)
+    // and compress the streak axis so blotches stretch into elongated drips
+    // instead of staying round — this is what makes it read as corrosion
+    // bleeding downward rather than generic blotchy grime.
+    const rx = x*cosr - y*sinr, ry = x*sinr + y*cosr;
+    let n = fbm(layers, rx/w, (ry/h)*0.2, weights);
     let blot = Math.pow(n,1.6);
     let s = speck()<0.02 ? -0.4:0;
     return blot+s;
@@ -367,66 +379,83 @@ STYLES.push({name:"Splatter", gen(ctx,w,h,p){
   }
 }});
 
-// 7. Torn Edges — noise field biased toward canvas border
+// 7. Torn Edges — jagged, high-frequency bite marks eating in from the border
 STYLES.push({name:"Torn Edges", gen(ctx,w,h,p){
   const rng = mulberry32(p.seed);
-  const {layers,weights} = baseNoiseCanvas(w,h,rng,3,p.scaleFactor*0.8);
+  const {layers,weights} = baseNoiseCanvas(w,h,rng,4,p.scaleFactor*0.5);
   fillFromField(ctx,w,h,(u,v)=>{
     const edge = Math.min(u,1-u,v,1-v)*2; // 0 at border -> 1 inside
     const n = fbm(layers,u,v,weights);
-    const torn = edge + (n-0.5)*0.9;
+    // Finer noise + a stronger noise weighting than the plain edge falloff
+    // is what turns this into ragged bite marks instead of a smooth fade —
+    // it needs to look distinct from the mild global edge vignette every
+    // style already gets.
+    const torn = edge*1.3 + (n-0.5)*1.4;
     return torn;
   });
 }});
 
-// 8. Dust & Grain — very fine sparse speckle
+// 8. Dust & Grain — small variable-radius clustered specks, not isolated pixels
 STYLES.push({name:"Dust & Grain", gen(ctx,w,h,p){
   ctx.fillStyle="#fff"; ctx.fillRect(0,0,w,h);
   const rng = mulberry32(p.seed);
   const density = 0.15*p.scaleFactor;
-  const img = ctx.getImageData(0,0,w,h);
   const n = Math.round(w*h*density*0.02);
+  ctx.fillStyle = "#000";
   for(let i=0;i<n;i++){
-    const x=Math.floor(rng()*w), y=Math.floor(rng()*h);
-    const idx=(y*w+x)*4;
-    const dark = Math.round(rng()*180);
-    img.data[idx]=dark; img.data[idx+1]=dark; img.data[idx+2]=dark;
+    const x = rng()*w, y = rng()*h;
+    const r = 0.4 + rng()*rng()*1.6; // mostly tiny, occasional slightly larger clump
+    ctx.globalAlpha = 0.4 + rng()*0.6;
+    ctx.beginPath(); ctx.arc(x,y,r,0,Math.PI*2); ctx.fill();
   }
-  ctx.putImageData(img,0,0);
+  ctx.globalAlpha = 1;
 }});
 
-// 9. Halftone Grunge — dot grid modulated by noise
+// 9. Halftone Grunge — dot grid modulated by noise, with jitter + dropout for a degraded print look
 STYLES.push({name:"Halftone Grunge", gen(ctx,w,h,p){
   ctx.fillStyle="#fff"; ctx.fillRect(0,0,w,h);
   const rng = mulberry32(p.seed);
   const {layers,weights} = baseNoiseCanvas(w,h,rng,2,p.scaleFactor);
   const cell = Math.max(4, Math.round(14*p.scaleFactor));
+  const jitterRng = mulberry32(p.seed^0x2545f491);
   ctx.save();
   ctx.translate(w/2,h/2); ctx.rotate(p.rot*Math.PI/180); ctx.translate(-w/2,-h/2);
   ctx.fillStyle="#000";
   for(let y=-cell;y<h+cell;y+=cell){
     for(let x=-cell;x<w+cell;x+=cell){
-      const u=Math.max(0,Math.min(1,x/w)), v=Math.max(0,Math.min(1,y/h));
+      // Position wobble + random missing dots is what separates "halftone"
+      // from "halftone GRUNGE" — a perfectly regular grid just looks like
+      // clean print, not degraded reproduction.
+      const jx = x + (jitterRng()-0.5)*cell*0.4;
+      const jy = y + (jitterRng()-0.5)*cell*0.4;
+      const dropout = jitterRng() < 0.12;
+      const u=Math.max(0,Math.min(1,jx/w)), v=Math.max(0,Math.min(1,jy/h));
       const n = fbm(layers,u,v,weights);
       const r = (cell*0.5) * Math.max(0,Math.min(1, 1-n*1.3));
-      if(r>0.3){ ctx.beginPath(); ctx.arc(x,y,r,0,Math.PI*2); ctx.fill(); }
+      if(!dropout && r>0.3){ ctx.beginPath(); ctx.arc(jx,jy,r,0,Math.PI*2); ctx.fill(); }
     }
   }
   ctx.restore();
 }});
 
-// 10. Canvas Weave — crosshatched sinusoidal grid + noise
+// 10. Canvas Weave — crosshatched sinusoidal grid, with noise-driven thread wobble
 STYLES.push({name:"Canvas Weave", gen(ctx,w,h,p){
   const rng = mulberry32(p.seed);
   const period = Math.max(3, 10*p.scaleFactor);
   const rot = p.rot*Math.PI/180;
   const cosr=Math.cos(rot), sinr=Math.sin(rot);
   const jitter = (rng()-0.5)*0.3;
+  const {layers,weights} = baseNoiseCanvas(w,h,mulberry32(p.seed^0x1e35a7bd),2,p.scaleFactor*2.5);
   fillFromField(ctx,w,h,(u,v,x,y)=>{
     const rx = x*cosr - y*sinr, ry = x*sinr + y*cosr;
-    const wx = Math.sin(rx/period*Math.PI*2);
-    const wy = Math.sin(ry/period*Math.PI*2);
-    return 0.5 + (wx*wy)*0.35 + jitter*0.2;
+    // Real woven fabric has thread-tension irregularity — a mathematically
+    // perfect sine grid reads as synthetic. Warp the phase with slow noise
+    // to give the threads a bit of organic waver.
+    const irregular = fbm(layers,u,v,weights);
+    const wobble = (irregular-0.5)*period*0.6;
+    const wx = Math.sin((rx+wobble)/period*Math.PI*2);
+    const wy = Math.sin((ry+wobble)/period*Math.PI*2);
+    return 0.5 + (wx*wy)*0.35 + jitter*0.2 + (irregular-0.5)*0.15;
   });
 }});
 
@@ -445,14 +474,22 @@ STYLES.push({name:"Wood Grain", gen(ctx,w,h,p){
   });
 }});
 
-// 12. Ink Bleed — soft blobs with feathered fbm edges
+// 12. Ink Bleed — soft blobs with capillary fingering radiating from the wet edge
 STYLES.push({name:"Ink Bleed", gen(ctx,w,h,p){
   const rng = mulberry32(p.seed);
   const {layers,weights} = baseNoiseCanvas(w,h,rng,4,p.scaleFactor*0.9);
+  const fingerRng = mulberry32(p.seed^0x27d4eb2f);
+  const {layers:fLayers, weights:fWeights} = baseNoiseCanvas(w,h,fingerRng,5,p.scaleFactor*0.35);
   fillFromField(ctx,w,h,(u,v)=>{
     let n = fbm(layers,u,v,weights);
-    n = Math.pow(n, 0.6);
-    return n;
+    let base = Math.pow(n, 0.6); // soft blob shape
+    // Real ink bleed isn't just a soft-edged blob — it wicks outward in thin
+    // branching capillary veins right at the wet/dry boundary. Without this,
+    // it's indistinguishable from any other soft blur.
+    let fn = fbm(fLayers,u,v,fWeights);
+    let vein = 1 - Math.pow(1-Math.abs(2*fn-1), 4); // thin ridge lines
+    let edgeZone = Math.max(0, 1 - Math.abs(base-0.45)*2.2); // strongest right at the boundary
+    return base - vein*edgeZone*0.5;
   });
 }});
 
@@ -533,22 +570,23 @@ function postProcessMask(canvas, params){
   const k = (c-0.5)*2; // -1..1
   const factor = (259*((k*255)+255)) / (255*(259-(k*255)));
   // Real-world wear concentrates at edges and corners, not uniformly across
-  // the whole surface. Without this, every style just reads as flat static
-  // regardless of settings. Pull mask values down (toward "erode") near the
-  // border, tapering off to no effect by roughly a third of the way in.
-  const edgeBiasFloor = 0.18;
-  const edgeBiasReach = 3.2;
+  // the whole surface. This has to actively FORCE the interior toward fully
+  // intact (255) — merely dimming values near the border isn't enough,
+  // since the erosion threshold downstream will still bite into the
+  // untouched raw noise anywhere it naturally dips low, center included.
+  const centerProtectFloor = 0.55; // mild vignette — most of the piece still gets a say from raw noise
+  const edgeBiasReach = 1.6;
   for(let py=0; py<h; py++){
     const dy = Math.min(py, h-1-py) / h;
     for(let px=0; px<w; px++){
       const dx = Math.min(px, w-1-px) / w;
-      const edgeProx = Math.min(1, Math.min(dx,dy) * edgeBiasReach);
-      const bias = edgeBiasFloor + (1-edgeBiasFloor)*edgeProx;
+      const distFromEdge = Math.min(1, Math.min(dx,dy) * edgeBiasReach); // 0 at border, 1 deep interior
+      const wearInfluence = 1 - (1-centerProtectFloor) * distFromEdge; // 1 at border, centerProtectFloor deep interior
       const i = (py*w+px)*4;
       let v = d[i];
       v = factor*(v-128)+128;
       v = Math.max(0,Math.min(255,v));
-      v = v * bias;
+      v = v*wearInfluence + 255*(1-wearInfluence);
       d[i]=v; d[i+1]=v; d[i+2]=v;
     }
   }
@@ -586,7 +624,7 @@ function renderMask(canvas, styleIdx, params){
    ========================================================================= */
 const state = {
   styleIdx: 0,
-  scale: 100, amount: 40, contrast: 50, soft: 35, rot: 0,
+  scale: 60, amount: 18, contrast: 50, soft: 35, rot: 0,
   invert: false, replaceMode: true,
   seed: Math.floor(Math.random()*1e9)
 };
