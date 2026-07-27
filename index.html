@@ -156,8 +156,8 @@
       <input type="range" id="scale" min="10" max="400" value="100">
     </div>
     <div class="ctrl-row">
-      <div class="ctrl-head"><label>Amount</label><span class="val" id="v_amount">65%</span></div>
-      <input type="range" id="amount" min="0" max="100" value="65">
+      <div class="ctrl-head"><label>Amount</label><span class="val" id="v_amount">40%</span></div>
+      <input type="range" id="amount" min="0" max="100" value="40">
     </div>
     <div class="ctrl-row">
       <div class="ctrl-head"><label>Contrast</label><span class="val" id="v_contrast">50%</span></div>
@@ -530,14 +530,27 @@ function postProcessMask(canvas, params){
   const img = ctx.getImageData(0,0,w,h);
   const d = img.data;
   const c = params.contrast; // 0..1, 0.5 = neutral
-  const cf = (259*(c*255+255))/(255*(259-c*255)); // standard contrast formula, c in -255..255 remapped
   const k = (c-0.5)*2; // -1..1
   const factor = (259*((k*255)+255)) / (255*(259-(k*255)));
-  for(let i=0;i<d.length;i+=4){
-    let v = d[i];
-    v = factor*(v-128)+128;
-    v = Math.max(0,Math.min(255,v));
-    d[i]=v; d[i+1]=v; d[i+2]=v;
+  // Real-world wear concentrates at edges and corners, not uniformly across
+  // the whole surface. Without this, every style just reads as flat static
+  // regardless of settings. Pull mask values down (toward "erode") near the
+  // border, tapering off to no effect by roughly a third of the way in.
+  const edgeBiasFloor = 0.18;
+  const edgeBiasReach = 3.2;
+  for(let py=0; py<h; py++){
+    const dy = Math.min(py, h-1-py) / h;
+    for(let px=0; px<w; px++){
+      const dx = Math.min(px, w-1-px) / w;
+      const edgeProx = Math.min(1, Math.min(dx,dy) * edgeBiasReach);
+      const bias = edgeBiasFloor + (1-edgeBiasFloor)*edgeProx;
+      const i = (py*w+px)*4;
+      let v = d[i];
+      v = factor*(v-128)+128;
+      v = Math.max(0,Math.min(255,v));
+      v = v * bias;
+      d[i]=v; d[i+1]=v; d[i+2]=v;
+    }
   }
   ctx.putImageData(img,0,0);
 
@@ -573,7 +586,7 @@ function renderMask(canvas, styleIdx, params){
    ========================================================================= */
 const state = {
   styleIdx: 0,
-  scale: 100, amount: 65, contrast: 50, soft: 35, rot: 0,
+  scale: 100, amount: 40, contrast: 50, soft: 35, rot: 0,
   invert: false, replaceMode: true,
   seed: Math.floor(Math.random()*1e9)
 };
