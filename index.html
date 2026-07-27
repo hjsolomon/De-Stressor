@@ -786,6 +786,7 @@ async function applyDistress(){
         var doc = app.activeDocument;
         var target = doc.layers.getByName(${jsStr(token)});
         if (!target) throw "Could not find the layer to isolate.";
+        app.echoToOE("MARKER:found-target:" + target.name);
         // Both Document.duplicate() and ArtLayer.duplicate() crash Photopea's
         // internal engine on this document (uncaught errors deep inside its
         // own code, escaping any try/catch on our side). So: no duplicate()
@@ -796,12 +797,15 @@ async function applyDistress(){
           savedVis.push(doc.layers[i].visible);
           doc.layers[i].visible = (doc.layers[i] === target);
         }
+        app.echoToOE("MARKER:hidden-siblings:" + doc.layers.length + "-layers");
         try {
           doc.saveToOE("png");
+          app.echoToOE("MARKER:saved");
         } finally {
           for (var j = 0; j < doc.layers.length; j++) {
             doc.layers[j].visible = savedVis[j];
           }
+          app.echoToOE("MARKER:restored-visibility");
         }
       } catch(e) {
         app.echoToOE(JSON.stringify({ok:false, error: String(e)}));
