@@ -796,13 +796,15 @@ async function applyDistress(){
     const scriptHide = `
       try {
         var doc = app.activeDocument;
-        var target = doc.layers.getByName(${jsStr(token)});
-        if (!target) throw "Could not find the layer to isolate.";
         var savedVis = [];
+        var foundTarget = false;
         for (var i = 0; i < doc.layers.length; i++) {
+          var isTarget = (doc.layers[i].name === ${jsStr(token)});
+          if (isTarget) foundTarget = true;
           savedVis.push(doc.layers[i].visible);
-          doc.layers[i].visible = (doc.layers[i] === target);
+          doc.layers[i].visible = isTarget;
         }
+        if (!foundTarget) throw "Could not find the layer to isolate (by name).";
         app.echoToOE(JSON.stringify({ok:true, savedVis: savedVis}));
       } catch(e) {
         app.echoToOE(JSON.stringify({ok:false, error: String(e)}));
