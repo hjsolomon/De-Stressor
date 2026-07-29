@@ -2,15 +2,14 @@
  
 A from-scratch Photopea plugin that mirrors what Texturelabs' **Distressor** panel
 does for Photoshop: pick a distress style, drag a few sliders, and it erodes the
-active layer's transparency to create a worn / weathered edge — non-destructively,
+active layer's transparency to create a worn / weathered edge - non-destructively,
 inside Photopea.
  
-It does **not** contain or reproduce any of Texturelabs' actual (photographed,
-paid) textures — that content is theirs. Instead, all 14 styles are generated
+All 14 styles are generated
 algorithmically at run time from a seeded noise engine, so the plugin is fully
 self-contained and free to use/host/modify.
  
-## What it does
+## Functionality
  
 - **14 procedural distress styles** — Paper Grain, Cracked Paint, Rust, Concrete,
   Scratches, Splatter, Torn Edges, Dust & Grain, Halftone Grunge, Canvas Weave,
@@ -27,7 +26,7 @@ self-contained and free to use/host/modify.
 - Works at the document's actual resolution and is applied through the layer's
   alpha channel (transparency), the same mechanism Distressor itself uses,
   rather than tinting or blending colors on top.
-## How it talks to Photopea
+## Logic
  
 Photopea plugins are plain web pages loaded in an iframe inside Photopea. They
 communicate by `postMessage`-ing a string of JavaScript to `window.parent`;
@@ -44,7 +43,7 @@ Because the plugin does the actual pixel math itself (in a `<canvas>`, using
 the layer's real pixels), the result is a real erosion of the artwork's alpha
 channel — not just a semi-transparent texture laid on top.
  
-## Using it
+## Instructions
  
 1. Open an image in Photopea and select the layer you want to distress.
 2. Open **Window → Plugins → De-Stressor**.
@@ -66,9 +65,3 @@ channel — not just a semi-transparent texture laid on top.
 - Very large documents (e.g. multi-thousand-pixel canvases) will be slower,
   since the mask is generated at full document resolution and the round trip
   goes through PNG-encoded data URIs.
-- Photopea's plugin `postMessage` API is thinly documented upstream, so if a
-  future Photopea update changes behavior, the sequence in `applyDistress()`
-  in `index.html` is the place to adjust — it's written as three clearly
-  separated steps (tag layer → export pixels → reimport result) specifically
-  so it's easy to debug one step at a time in Photopea's own **File → Scripts**
-  editor.
