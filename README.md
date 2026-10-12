@@ -44,10 +44,9 @@ Copy/paste and named presets save all settings, including which texture is selec
 Photopea plugins are web pages in an iframe that `postMessage` scripts to
 Photopea and receive `app.echoToOE(...)` / `saveToOE(...)` results back.
 
-1. **Export just the layer.** The plugin copies the active layer into a
-   temporary transparent document of the same size, exports that as PNG, and
-   closes it, so other layers don't leak in. If Photopea refuses that route,
-   it falls back to exporting the visible document and warns you.
+1. **Export just the layer.** The plugin briefly hides every other layer,
+   exports the document as PNG, then restores each layer's visibility and
+   opacity exactly as it was, so other layers don't leak in.
 2. **Texture field.** The texture is placed (scale, rotation, offset, mirrored
    tiling) at document size, converted to luminance and histogram-equalized,
    so Amount behaves the same for light and dark textures.
