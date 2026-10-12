@@ -42,23 +42,55 @@
   .section-label::after{content:""; flex:1; height:1px; background:var(--line);}
   .section-label .idx{color:var(--accent2);}
 
-  /* style grid */
-  #styleGrid{
-    display:grid; grid-template-columns:repeat(4,1fr); gap:6px;
-  }
-  .style-cell{
+  /* texture library */
+  #texGrid{display:grid; grid-template-columns:repeat(4,1fr); gap:6px;}
+  .tex-cell{
     position:relative; border:1px solid var(--line); border-radius:3px; cursor:pointer;
     background:#111; overflow:hidden; aspect-ratio:1/1;
   }
-  .style-cell canvas{display:block; width:100%; height:100%;}
-  .style-cell .lbl{
+  .tex-cell canvas{display:block; width:100%; height:100%;}
+  .tex-cell .lbl{
     position:absolute; left:0; right:0; bottom:0; padding:2px 4px;
     font-size:8.5px; font-family:var(--mono); background:rgba(0,0,0,.6);
     color:#cfcabf; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
   }
-  .style-cell.active{border-color:var(--accent); box-shadow:0 0 0 1px var(--accent);}
-  .style-cell.active .lbl{background:var(--accent); color:#fff;}
-  .style-cell:hover{border-color:#666;}
+  .tex-cell .del{
+    position:absolute; top:2px; right:2px; width:15px; height:15px; line-height:13px;
+    padding:0; font-size:11px; text-align:center; border-radius:2px; display:none;
+    background:rgba(0,0,0,.7); border:1px solid #555; color:#ddd;
+  }
+  .tex-cell:hover .del{display:block;}
+  .tex-cell.active{border-color:var(--accent); box-shadow:0 0 0 1px var(--accent);}
+  .tex-cell.active .lbl{background:var(--accent); color:#fff;}
+  .tex-cell:hover{border-color:#666;}
+  .tex-add{
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    border:1px dashed #555; color:var(--dim); font-family:var(--mono); font-size:9px; gap:2px;
+    text-align:center; background:transparent;
+  }
+  .tex-add b{font-size:18px; font-weight:400; color:var(--accent2);}
+  .tex-add:hover{border-color:var(--accent2); color:var(--ink);}
+  #texGrid.drag{outline:1px dashed var(--accent2); outline-offset:3px;}
+  .hint{font-size:10px; color:var(--dim); line-height:1.4; margin-top:6px;}
+
+  /* preview */
+  #previewBox{
+    position:relative; border:1px solid var(--line); border-radius:3px; min-height:120px;
+    display:flex; align-items:center; justify-content:center; overflow:hidden;
+    background-color:#3a3a3a;
+    background-image:
+      linear-gradient(45deg,#2e2e2e 25%,transparent 25%),
+      linear-gradient(-45deg,#2e2e2e 25%,transparent 25%),
+      linear-gradient(45deg,transparent 75%,#2e2e2e 75%),
+      linear-gradient(-45deg,transparent 75%,#2e2e2e 75%);
+    background-size:12px 12px; background-position:0 0,0 6px,6px -6px,-6px 0;
+  }
+  #preview{display:block; max-width:100%; max-height:240px;}
+  #previewEmpty{
+    position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+    padding:12px; text-align:center; color:var(--dim); font-size:10.5px; line-height:1.4;
+    background:rgba(28,28,28,.85);
+  }
 
   /* sliders */
   .ctrl-row{margin-bottom:10px;}
@@ -92,7 +124,8 @@
   .switch input:checked + .slider-pill{background:var(--accent);}
   .switch input:checked + .slider-pill::before{transform:translateX(14px); background:#fff;}
 
-  .btn-row{display:flex; gap:6px; margin-top:4px;}
+  .btn-row{display:flex; gap:6px; margin-top:6px;}
+  .btn-row button{flex:1;}
   button{
     font-family:var(--sans); font-size:11px; padding:7px 10px; border-radius:3px;
     border:1px solid var(--line); background:#333; color:var(--ink); cursor:pointer;
@@ -109,17 +142,14 @@
   }
 
   #applyBtn{
-    width:100%; padding:11px; font-size:12px; font-weight:600; letter-spacing:.03em;
-    background:linear-gradient(180deg,var(--accent2),var(--accent)); color:#fff; border:none;
-    border-radius:4px; text-transform:uppercase; font-family:var(--mono); font-size:10.5px;
-    letter-spacing:.1em;
+    width:100%; padding:11px; font-weight:600; border:none; border-radius:4px;
+    background:linear-gradient(180deg,var(--accent2),var(--accent)); color:#fff;
+    text-transform:uppercase; font-family:var(--mono); font-size:10.5px; letter-spacing:.1em;
   }
   #applyBtn:hover{filter:brightness(1.08);}
   #applyBtn:disabled{background:#4a4a4a; color:#8a8579;}
 
-  footer{
-    border-top:1px solid var(--line); padding:8px 12px; background:var(--panel);
-  }
+  footer{border-top:1px solid var(--line); padding:8px 12px; background:var(--panel);}
   #status{
     font-family:var(--mono); font-size:10px; color:var(--dim); min-height:14px;
     line-height:1.4; white-space:pre-wrap;
@@ -129,63 +159,79 @@
 
   .mini-toolbar{display:flex; gap:5px; margin-top:6px;}
   .mini-toolbar button{flex:1;}
-
-  .swatch{display:flex; align-items:center; gap:6px;}
-  .swatch input[type=color]{
-    width:24px; height:24px; padding:0; border:1px solid var(--line); border-radius:3px; background:none;
-  }
 </style>
 </head>
 <body>
 <div id="app">
   <header>
     <h1>DE<span class="dot">·</span>STRESSOR</h1>
-    <p>Procedural wear &amp; grunge masking for the active layer, applied through transparency — non-destructive, undoable, no real-world texture photography required.</p>
-    <p style="color:var(--accent2); font-weight:600;">Before clicking Apply: hide every other layer in Photopea by hand (click their eye icons off) so only your target layer is visible, then select that layer and click Apply. You can turn the other layers back on once it's done.</p>
+    <p>Texture-driven wear for the active layer. Load a texture, grab your layer, dial it in on the preview, then apply.</p>
   </header>
 
   <div class="scroll">
 
-    <div class="section-label"><span class="idx">01</span> STYLE</div>
-    <div id="styleGrid"></div>
+    <div class="section-label"><span class="idx">01</span> TEXTURE</div>
+    <div id="texGrid"></div>
+    <input type="file" id="texFile" accept="image/*" multiple hidden>
+    <div class="hint">Click <b>+</b> or drop images here. Grungy, high-contrast scans (paper, rust, concrete, scratches) work best. Textures are kept in this browser.</div>
 
-    <div class="section-label"><span class="idx">02</span> CONTROLS</div>
+    <div class="section-label"><span class="idx">02</span> PREVIEW</div>
+    <div id="previewBox">
+      <canvas id="preview" width="1" height="1"></canvas>
+      <div id="previewEmpty">Select a layer in Photopea and click <b>&nbsp;Grab layer&nbsp;</b> to preview.</div>
+    </div>
+    <div class="btn-row">
+      <button id="grabBtn" class="small">Grab layer</button>
+      <button id="maskViewBtn" class="small ghost">Show mask</button>
+    </div>
 
+    <div class="section-label"><span class="idx">03</span> WEAR</div>
     <div class="ctrl-row">
-      <div class="ctrl-head"><label>Scale</label><span class="val" id="v_scale">60%</span></div>
-      <input type="range" id="scale" min="10" max="400" value="60">
+      <div class="ctrl-head"><label>Amount</label><span class="val" id="v_amount"></span></div>
+      <input type="range" id="amount" min="0" max="100" value="15">
     </div>
     <div class="ctrl-row">
-      <div class="ctrl-head"><label>Amount</label><span class="val" id="v_amount">18%</span></div>
-      <input type="range" id="amount" min="0" max="100" value="18">
+      <div class="ctrl-head"><label>Edge wear</label><span class="val" id="v_edge"></span></div>
+      <input type="range" id="edge" min="0" max="100" value="55">
     </div>
     <div class="ctrl-row">
-      <div class="ctrl-head"><label>Contrast</label><span class="val" id="v_contrast">50%</span></div>
-      <input type="range" id="contrast" min="0" max="100" value="50">
+      <div class="ctrl-head"><label>Edge reach</label><span class="val" id="v_reach"></span></div>
+      <input type="range" id="reach" min="1" max="300" value="40">
     </div>
     <div class="ctrl-row">
-      <div class="ctrl-head"><label>Edge Softness</label><span class="val" id="v_soft">35%</span></div>
-      <input type="range" id="soft" min="0" max="100" value="35">
+      <div class="ctrl-head"><label>Softness</label><span class="val" id="v_soft"></span></div>
+      <input type="range" id="soft" min="0" max="100" value="8">
+    </div>
+
+    <div class="section-label"><span class="idx">04</span> TEXTURE PLACEMENT</div>
+    <div class="ctrl-row">
+      <div class="ctrl-head"><label>Scale</label><span class="val" id="v_scale"></span></div>
+      <input type="range" id="scale" min="10" max="400" value="100">
     </div>
     <div class="ctrl-row">
-      <div class="ctrl-head"><label>Rotation</label><span class="val" id="v_rot">0°</span></div>
+      <div class="ctrl-head"><label>Rotation</label><span class="val" id="v_rot"></span></div>
       <input type="range" id="rot" min="0" max="360" value="0">
     </div>
-
     <div class="toggle-row">
-      <label>Invert mask</label>
+      <label>Invert texture</label>
       <label class="switch"><input type="checkbox" id="invert"><span class="slider-pill"></span></label>
     </div>
+    <div class="btn-row" style="margin-top:0">
+      <button id="shuffleBtn" class="ghost small">⟲ Shuffle placement</button>
+      <button id="resetPlaceBtn" class="ghost small">Reset placement</button>
+    </div>
+
+    <div class="section-label"><span class="idx">05</span> OUTPUT</div>
     <div class="toggle-row">
       <label>Replace original layer</label>
       <label class="switch"><input type="checkbox" id="replaceMode" checked><span class="slider-pill"></span></label>
     </div>
-
-    <div class="btn-row">
-      <button id="randomizeBtn" class="ghost small" style="flex:1">⟲ Randomize seed</button>
+    <div class="toggle-row">
+      <label>Output mask only (grayscale layer)</label>
+      <label class="switch"><input type="checkbox" id="maskOnly"><span class="slider-pill"></span></label>
     </div>
 
-    <div class="section-label"><span class="idx">03</span> PRESETS</div>
+    <div class="section-label"><span class="idx">06</span> PRESETS</div>
     <div class="row2">
       <button id="copyBtn" class="small">Copy settings</button>
       <button id="pasteBtn" class="small">Paste settings</button>
@@ -209,504 +255,401 @@
 <script>
 /* =========================================================================
    DE-STRESSOR for Photopea
-   A from-scratch, procedurally-generated equivalent of Texturelabs' Distressor
-   panel for Photoshop: pick a distress style, tune sliders, and it erodes the
-   active layer's transparency to create a worn / weathered look — without
-   relying on any of Texturelabs' proprietary photographed textures (all 14
-   patterns here are generated algorithmically at run time from a seeded PRNG).
+   Erodes the active layer's transparency using a texture the user loads,
+   with extra wear concentrated near the artwork's own edges:
+
+     keep(px) = smoothstep(thr - band, thr + band, T(px))
+     thr(px)  = amount + edgeWear * edgeProximity(px)
+
+   T is the texture's luminance, histogram-equalized so that Amount reads as
+   "fraction of the surface worn away" regardless of which texture is used.
+   edgeProximity is 1 at the layer's alpha boundary and falls to 0 over
+   Edge Reach pixels (via an exact Euclidean distance transform).
    ========================================================================= */
 
-/* ---------- tiny seeded PRNG (mulberry32) ---------- */
-function mulberry32(seed){
-  return function(){
-    seed |= 0; seed = (seed + 0x6D2B79F5) | 0;
-    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
+/* ---------- texture library (IndexedDB, memory fallback) ---------- */
+const MAX_TEX_SIDE = 4096;
+const textures = []; // {id, name, blob, bitmap(canvas), thumb}
+let texDB = null;
+
+function openTexDB(){
+  return new Promise((resolve)=>{
+    try{
+      const req = indexedDB.open('destressor', 1);
+      req.onupgradeneeded = ()=> req.result.createObjectStore('textures', {keyPath:'id'});
+      req.onsuccess = ()=> resolve(req.result);
+      req.onerror = ()=> resolve(null);
+    }catch(e){ resolve(null); }
+  });
+}
+function dbTx(mode, fn){
+  return new Promise((resolve)=>{
+    if(!texDB){ resolve(null); return; }
+    try{
+      const tx = texDB.transaction('textures', mode);
+      const req = fn(tx.objectStore('textures'));
+      tx.oncomplete = ()=> resolve(req ? req.result : null);
+      tx.onerror = ()=> resolve(null);
+    }catch(e){ resolve(null); }
+  });
 }
 
-/* ---------- value-noise helper (cheap pseudo-perlin) ---------- */
-function makeValueNoise(rng, gridSize){
-  const g = gridSize;
-  const grid = new Float32Array((g+1)*(g+1));
-  for(let i=0;i<grid.length;i++) grid[i] = rng();
-  function smooth(t){ return t*t*(3-2*t); }
-  return function(x,y){ // x,y in [0,1)
-    const gx = x*g, gy = y*g;
-    const x0 = Math.floor(gx), y0 = Math.floor(gy);
-    const x1 = (x0+1), y1 = (y0+1);
-    const sx = smooth(gx-x0), sy = smooth(gy-y0);
-    const idx = (xx,yy)=> grid[((yy%(g+1))+(g+1))%(g+1)*(g+1) + (((xx%(g+1))+(g+1))%(g+1))];
-    const n00=idx(x0,y0), n10=idx(x1,y0), n01=idx(x0,y1), n11=idx(x1,y1);
-    const nx0 = n00 + (n10-n00)*sx;
-    const nx1 = n01 + (n11-n01)*sx;
-    return nx0 + (nx1-nx0)*sy;
-  };
+async function decodeTexture(blob){
+  const img = await blobToImage(blob);
+  const k = Math.min(1, MAX_TEX_SIDE / Math.max(img.naturalWidth, img.naturalHeight));
+  const c = document.createElement('canvas');
+  c.width = Math.max(1, Math.round(img.naturalWidth*k));
+  c.height = Math.max(1, Math.round(img.naturalHeight*k));
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = '#fff'; ctx.fillRect(0,0,c.width,c.height); // transparent PNG regions read as "intact"
+  ctx.drawImage(img, 0, 0, c.width, c.height);
+  return c;
 }
-function fbm(noiseFns, x, y, weights){
-  let sum=0, wsum=0;
-  for(let i=0;i<noiseFns.length;i++){ sum += noiseFns[i](x,y)*weights[i]; wsum+=weights[i]; }
-  return sum/wsum;
+
+async function addTextureBlob(blob, name, id, persist){
+  const bitmap = await decodeTexture(blob);
+  const tex = {id: id || ('t'+Date.now()+'_'+Math.floor(Math.random()*1e6)), name, blob, bitmap};
+  textures.push(tex);
+  if(persist) await dbTx('readwrite', s=> s.put({id:tex.id, name, blob}));
+  return tex;
+}
+
+async function removeTexture(id){
+  const i = textures.findIndex(t=>t.id===id);
+  if(i<0) return;
+  textures.splice(i,1);
+  await dbTx('readwrite', s=> s.delete(id));
+  if(state.textureId===id){
+    state.textureId = textures.length ? textures[0].id : null;
+    invalidateField();
+  }
+  renderTexGrid();
+  schedulePreview();
+}
+
+function activeTexture(){ return textures.find(t=>t.id===state.textureId) || null; }
+
+const texGrid = document.getElementById('texGrid');
+const texFile = document.getElementById('texFile');
+
+function renderTexGrid(){
+  texGrid.innerHTML = '';
+  textures.forEach(t=>{
+    const cell = document.createElement('div');
+    cell.className = 'tex-cell' + (t.id===state.textureId ? ' active' : '');
+    cell.title = t.name;
+    const cv = document.createElement('canvas'); cv.width=64; cv.height=64;
+    const s = Math.max(64/t.bitmap.width, 64/t.bitmap.height);
+    const cctx = cv.getContext('2d');
+    cctx.drawImage(t.bitmap, (64-t.bitmap.width*s)/2, (64-t.bitmap.height*s)/2, t.bitmap.width*s, t.bitmap.height*s);
+    cell.appendChild(cv);
+    const lbl = document.createElement('div'); lbl.className='lbl'; lbl.textContent = t.name;
+    cell.appendChild(lbl);
+    const del = document.createElement('button'); del.className='del'; del.textContent='×'; del.title='Remove texture';
+    del.addEventListener('click', (e)=>{ e.stopPropagation(); removeTexture(t.id); });
+    cell.appendChild(del);
+    cell.addEventListener('click', ()=>{
+      state.textureId = t.id; invalidateField(); renderTexGrid(); schedulePreview();
+    });
+    texGrid.appendChild(cell);
+  });
+  const add = document.createElement('div');
+  add.className = 'tex-cell tex-add';
+  add.innerHTML = '<b>+</b>LOAD';
+  add.addEventListener('click', ()=> texFile.click());
+  texGrid.appendChild(add);
+}
+
+async function loadFiles(files){
+  const imgs = [...files].filter(f=> f.type.startsWith('image/'));
+  if(!imgs.length) return;
+  setStatus('Loading '+imgs.length+' texture(s)…');
+  let last = null;
+  for(const f of imgs){
+    try{ last = await addTextureBlob(f, f.name.replace(/\.[^.]+$/,''), null, true); }
+    catch(e){ setStatus('Could not decode '+f.name, true); }
+  }
+  if(last){ state.textureId = last.id; invalidateField(); }
+  renderTexGrid();
+  schedulePreview();
+  if(last) setStatus('Loaded '+imgs.length+' texture(s).', false, true);
+}
+texFile.addEventListener('change', ()=>{ loadFiles(texFile.files); texFile.value=''; });
+['dragenter','dragover'].forEach(ev=> document.addEventListener(ev, e=>{ e.preventDefault(); texGrid.classList.add('drag'); }));
+['dragleave','drop'].forEach(ev=> document.addEventListener(ev, e=>{ e.preventDefault(); texGrid.classList.remove('drag'); }));
+document.addEventListener('drop', e=>{ if(e.dataTransfer && e.dataTransfer.files) loadFiles(e.dataTransfer.files); });
+
+/* =========================================================================
+   DISTRESS ENGINE
+   ========================================================================= */
+
+// Mirror-tile the texture so tiling at small scales has no visible seams.
+const mirrorCache = new WeakMap();
+function mirroredTile(bitmap){
+  let c = mirrorCache.get(bitmap);
+  if(c) return c;
+  const w = bitmap.width, h = bitmap.height;
+  c = document.createElement('canvas'); c.width = w*2; c.height = h*2;
+  const ctx = c.getContext('2d');
+  ctx.drawImage(bitmap, 0, 0);
+  ctx.save(); ctx.translate(w*2, 0); ctx.scale(-1, 1); ctx.drawImage(bitmap, 0, 0); ctx.restore();
+  ctx.save(); ctx.translate(0, h*2); ctx.scale(1, -1); ctx.drawImage(bitmap, 0, 0); ctx.restore();
+  ctx.save(); ctx.translate(w*2, h*2); ctx.scale(-1, -1); ctx.drawImage(bitmap, 0, 0); ctx.restore();
+  mirrorCache.set(bitmap, c);
+  return c;
+}
+
+/* Texture luminance field at (w,h), which is the document size times `s`.
+   Scale 100% = texture just covers the document. Returns Float32Array 0..1,
+   histogram-equalized, so a threshold of t removes ~t of the surface. */
+function renderTextureField(tex, docW, docH, w, h, p){
+  const s = w / docW;
+  const tw = tex.bitmap.width, th = tex.bitmap.height;
+  const cover = Math.max(docW/tw, docH/th);
+  const k = cover * (p.scale/100) * s;
+
+  const c = document.createElement('canvas'); c.width = w; c.height = h;
+  const ctx = c.getContext('2d', {willReadFrequently:true});
+  const pat = ctx.createPattern(mirroredTile(tex.bitmap), 'repeat');
+  ctx.translate(w/2 + p.offX*w, h/2 + p.offY*h);
+  ctx.rotate(p.rot * Math.PI/180);
+  ctx.scale(k * (p.flipX ? -1 : 1), k * (p.flipY ? -1 : 1));
+  ctx.translate(-tw/2, -th/2); // original (un-mirrored) quadrant centred on the document
+  ctx.fillStyle = pat;
+  const R = Math.hypot(w, h) / k + tw*2 + th*2;
+  ctx.fillRect(-R, -R, R*2 + tw, R*2 + th);
+
+  const d = ctx.getImageData(0, 0, w, h).data;
+  const n = w*h;
+  const lum = new Uint8Array(n);
+  const hist = new Float64Array(256);
+  for(let i=0, j=0; i<n; i++, j+=4){
+    const L = (d[j]*54 + d[j+1]*183 + d[j+2]*19) >> 8;
+    lum[i] = L; hist[L]++;
+  }
+  // midpoint CDF so tied values land in the middle of their band
+  const map = new Float32Array(256);
+  let acc = 0;
+  for(let v=0; v<256; v++){ map[v] = (acc + hist[v]/2) / n; acc += hist[v]; }
+  const out = new Float32Array(n);
+  if(p.invert) for(let i=0;i<n;i++) out[i] = 1 - map[lum[i]];
+  else         for(let i=0;i<n;i++) out[i] = map[lum[i]];
+  return out;
+}
+
+/* Exact Euclidean distance transform (Felzenszwalb & Huttenlocher).
+   Returns, for each pixel, the distance in px to the nearest pixel that is
+   transparent (alpha < 128) — the canvas border counts as transparent. */
+function edt1d(f, n, d, v, z){
+  let k = 0; v[0] = 0; z[0] = -Infinity; z[1] = Infinity;
+  for(let q=1; q<n; q++){
+    let s = ((f[q] + q*q) - (f[v[k]] + v[k]*v[k])) / (2*q - 2*v[k]);
+    while(s <= z[k]){ k--; s = ((f[q] + q*q) - (f[v[k]] + v[k]*v[k])) / (2*q - 2*v[k]); }
+    k++; v[k] = q; z[k] = s; z[k+1] = Infinity;
+  }
+  k = 0;
+  for(let q=0; q<n; q++){
+    while(z[k+1] < q) k++;
+    const dq = q - v[k];
+    d[q] = dq*dq + f[v[k]];
+  }
+}
+function distanceToEdge(alpha, w, h){
+  const W = w+2, H = h+2, INF = 1e20;
+  const g = new Float32Array(W*H); // zero border = transparent
+  for(let y=0; y<h; y++){
+    const row = (y+1)*W + 1, src = y*w;
+    for(let x=0; x<w; x++) g[row+x] = alpha[(src+x)*4+3] >= 128 ? INF : 0;
+  }
+  const N = Math.max(W,H);
+  const f = new Float64Array(N), d = new Float64Array(N), v = new Int32Array(N), z = new Float64Array(N+1);
+  for(let x=0; x<W; x++){
+    for(let y=0; y<H; y++) f[y] = g[y*W+x];
+    edt1d(f, H, d, v, z);
+    for(let y=0; y<H; y++) g[y*W+x] = d[y];
+  }
+  const out = new Float32Array(w*h);
+  for(let y=0; y<H; y++){
+    const row = y*W;
+    for(let x=0; x<W; x++) f[x] = g[row+x];
+    edt1d(f, W, d, v, z);
+    if(y>0 && y<H-1){
+      const o = (y-1)*w;
+      for(let x=1; x<W-1; x++) out[o+x-1] = Math.sqrt(d[x]);
+    }
+  }
+  return out;
+}
+
+/* Core: writes the distressed result into `outData` (ImageData.data, same
+   size as src). `dist` is the distance field in the CURRENT resolution's
+   pixels, `s` the current-resolution / document-resolution ratio. */
+function applyWear(src, field, dist, w, h, s, p, outData, maskView){
+  const amount = p.amount/100, edge = p.edge/100;
+  const reach = Math.max(0.5, p.reach * s);
+  const band = 0.004 + (p.soft/100) * 0.18;
+  const n = w*h;
+  for(let i=0, j=0; i<n; i++, j+=4){
+    let e = 0;
+    if(dist && edge > 0){
+      const t = dist[i] / reach;
+      e = t >= 1 ? 0 : (1-t)*(1-t);
+    }
+    const thr = amount + edge*e;
+    const lo = thr - band, hi = thr + band, T = field[i];
+    let keep;
+    if(T <= lo) keep = 0;
+    else if(T >= hi) keep = 1;
+    else { const u = (T-lo)/(hi-lo); keep = u*u*(3-2*u); }
+    if(maskView){
+      const g = Math.round(keep*255);
+      outData[j] = g; outData[j+1] = g; outData[j+2] = g; outData[j+3] = 255;
+    } else {
+      outData[j] = src[j]; outData[j+1] = src[j+1]; outData[j+2] = src[j+2];
+      outData[j+3] = Math.round(src[j+3] * keep);
+    }
+  }
 }
 
 /* =========================================================================
-   14 DISTRESS STYLE GENERATORS
-   Each returns a function render(ctx, w, h, params) that paints a GRAYSCALE
-   mask into ctx: white = keep layer opaque, black = erode to transparent.
-   params: {seed, scaleFactor, contrast(0-1), soft(0-1)}
-   ========================================================================= */
-const STYLES = [];
-
-function baseNoiseCanvas(w,h,rng,octaves,scaleFactor){
-  const cell = Math.max(4, Math.round(24*scaleFactor));
-  const gridSize = Math.max(2, Math.round(w/cell));
-  const layers=[], weights=[];
-  let g = gridSize, wgt=1;
-  for(let o=0;o<octaves;o++){
-    layers.push(makeValueNoise(rng, Math.max(2,Math.round(g))));
-    weights.push(wgt);
-    g = Math.max(2, Math.round(g*1.9));
-    wgt *= 0.55;
-  }
-  return {layers, weights};
-}
-
-function fillFromField(ctx,w,h,fieldFn){
-  const img = ctx.createImageData(w,h);
-  for(let y=0;y<h;y++){
-    for(let x=0;x<w;x++){
-      let v = fieldFn(x/w, y/h, x, y);
-      v = Math.max(0, Math.min(1, v));
-      const p = (y*w+x)*4;
-      const c = Math.round(v*255);
-      img.data[p]=c; img.data[p+1]=c; img.data[p+2]=c; img.data[p+3]=255;
-    }
-  }
-  ctx.putImageData(img,0,0);
-}
-
-// 1. Paper Grain — subtle large-scale mottling + real per-pixel fine grain
-STYLES.push({name:"Paper Grain", gen(ctx,w,h,p){
-  const rng = mulberry32(p.seed);
-  const {layers,weights} = baseNoiseCanvas(w,h,rng,2,p.scaleFactor*1.5);
-  const grainRng = mulberry32(p.seed^0x51ed270b);
-  fillFromField(ctx,w,h,(u,v)=>{
-    const mottle = fbm(layers,u,v,weights);   // gentle large-scale variation
-    const grain = grainRng();                  // true per-pixel independent noise
-    return mottle*0.35 + grain*0.65;            // grain dominates — this is what reads as "grain" rather than "clouds"
-  });
-}});
-
-// 2. Cracked Paint — ridged noise thresholded into vein-like cracks
-STYLES.push({name:"Cracked Paint", gen(ctx,w,h,p){
-  const rng = mulberry32(p.seed);
-  const {layers,weights} = baseNoiseCanvas(w,h,rng,4,p.scaleFactor);
-  fillFromField(ctx,w,h,(u,v)=>{
-    let n = fbm(layers,u,v,weights);
-    let ridge = 1 - Math.abs(2*n-1);
-    ridge = Math.pow(ridge, 3.2);
-    return 1-ridge;
-  });
-}});
-
-// 3. Rust & Corrosion — blotchy noise stretched along a streak axis (gravity drip) + speckle
-STYLES.push({name:"Rust", gen(ctx,w,h,p){
-  const rng = mulberry32(p.seed);
-  const {layers,weights} = baseNoiseCanvas(w,h,rng,3,p.scaleFactor*1.4);
-  const speck = mulberry32(p.seed^0x9e3779b9);
-  const rot = (p.rot||0)*Math.PI/180;
-  const cosr=Math.cos(rot), sinr=Math.sin(rot);
-  fillFromField(ctx,w,h,(u,v,x,y)=>{
-    // Rotate into "streak space" (default: vertical, like gravity-driven bleed)
-    // and compress the streak axis so blotches stretch into elongated drips
-    // instead of staying round — this is what makes it read as corrosion
-    // bleeding downward rather than generic blotchy grime.
-    const rx = x*cosr - y*sinr, ry = x*sinr + y*cosr;
-    let n = fbm(layers, rx/w, (ry/h)*0.2, weights);
-    let blot = Math.pow(n,1.6);
-    let s = speck()<0.02 ? -0.4:0;
-    return blot+s;
-  });
-}});
-
-// 4. Concrete — mid noise + fine grain composited
-STYLES.push({name:"Concrete", gen(ctx,w,h,p){
-  const rng = mulberry32(p.seed);
-  const base = baseNoiseCanvas(w,h,rng,2,p.scaleFactor*1.2);
-  const grainRng = mulberry32(p.seed^0x1234567);
-  fillFromField(ctx,w,h,(u,v)=>{
-    let n = fbm(base.layers,u,v,base.weights);
-    let grain = (grainRng()-0.5)*0.15;
-    return n*0.85+0.15+grain;
-  });
-}});
-
-// 5. Scratches — many thin random-angle strokes
-STYLES.push({name:"Scratches", gen(ctx,w,h,p){
-  ctx.fillStyle="#fff"; ctx.fillRect(0,0,w,h);
-  const rng = mulberry32(p.seed);
-  const count = Math.round(40 + 260*(p.scaleFactor));
-  ctx.strokeStyle="#000";
-  for(let i=0;i<count;i++){
-    const len = (0.15+rng()*0.6)*Math.max(w,h);
-    const cx=rng()*w, cy=rng()*h;
-    const ang = (p.rot*Math.PI/180) + (rng()-0.5)*0.6;
-    const dx=Math.cos(ang)*len/2, dy=Math.sin(ang)*len/2;
-    ctx.lineWidth = 0.5+rng()*1.8;
-    ctx.globalAlpha = 0.35+rng()*0.65;
-    ctx.beginPath();
-    ctx.moveTo(cx-dx, cy-dy);
-    ctx.lineTo(cx+dx, cy+dy);
-    ctx.stroke();
-  }
-  ctx.globalAlpha=1;
-}});
-
-// 6. Spray Splatter — random soft-edged circles of varying radius
-STYLES.push({name:"Splatter", gen(ctx,w,h,p){
-  ctx.fillStyle="#fff"; ctx.fillRect(0,0,w,h);
-  const rng = mulberry32(p.seed);
-  const count = Math.round(120 + 500/(p.scaleFactor+0.2));
-  for(let i=0;i<count;i++){
-    const r = (2+rng()*rng()*40)*p.scaleFactor;
-    const cx=rng()*w, cy=rng()*h;
-    const g = ctx.createRadialGradient(cx,cy,0,cx,cy,r);
-    g.addColorStop(0,"rgba(0,0,0,0.9)");
-    g.addColorStop(1,"rgba(0,0,0,0)");
-    ctx.fillStyle=g;
-    ctx.beginPath(); ctx.arc(cx,cy,r,0,Math.PI*2); ctx.fill();
-  }
-}});
-
-// 7. Torn Edges — jagged, high-frequency bite marks eating in from the border
-STYLES.push({name:"Torn Edges", gen(ctx,w,h,p){
-  const rng = mulberry32(p.seed);
-  const {layers,weights} = baseNoiseCanvas(w,h,rng,4,p.scaleFactor*0.5);
-  fillFromField(ctx,w,h,(u,v)=>{
-    const edge = Math.min(u,1-u,v,1-v)*2; // 0 at border -> 1 inside
-    const n = fbm(layers,u,v,weights);
-    // Finer noise + a stronger noise weighting than the plain edge falloff
-    // is what turns this into ragged bite marks instead of a smooth fade —
-    // it needs to look distinct from the mild global edge vignette every
-    // style already gets.
-    const torn = edge*1.3 + (n-0.5)*1.4;
-    return torn;
-  });
-}});
-
-// 8. Dust & Grain — small variable-radius clustered specks, not isolated pixels
-STYLES.push({name:"Dust & Grain", gen(ctx,w,h,p){
-  ctx.fillStyle="#fff"; ctx.fillRect(0,0,w,h);
-  const rng = mulberry32(p.seed);
-  const density = 0.15*p.scaleFactor;
-  const n = Math.round(w*h*density*0.02);
-  ctx.fillStyle = "#000";
-  for(let i=0;i<n;i++){
-    const x = rng()*w, y = rng()*h;
-    const r = 0.4 + rng()*rng()*1.6; // mostly tiny, occasional slightly larger clump
-    ctx.globalAlpha = 0.4 + rng()*0.6;
-    ctx.beginPath(); ctx.arc(x,y,r,0,Math.PI*2); ctx.fill();
-  }
-  ctx.globalAlpha = 1;
-}});
-
-// 9. Halftone Grunge — dot grid modulated by noise, with jitter + dropout for a degraded print look
-STYLES.push({name:"Halftone Grunge", gen(ctx,w,h,p){
-  ctx.fillStyle="#fff"; ctx.fillRect(0,0,w,h);
-  const rng = mulberry32(p.seed);
-  const {layers,weights} = baseNoiseCanvas(w,h,rng,2,p.scaleFactor);
-  const cell = Math.max(4, Math.round(14*p.scaleFactor));
-  const jitterRng = mulberry32(p.seed^0x2545f491);
-  ctx.save();
-  ctx.translate(w/2,h/2); ctx.rotate(p.rot*Math.PI/180); ctx.translate(-w/2,-h/2);
-  ctx.fillStyle="#000";
-  for(let y=-cell;y<h+cell;y+=cell){
-    for(let x=-cell;x<w+cell;x+=cell){
-      // Position wobble + random missing dots is what separates "halftone"
-      // from "halftone GRUNGE" — a perfectly regular grid just looks like
-      // clean print, not degraded reproduction.
-      const jx = x + (jitterRng()-0.5)*cell*0.4;
-      const jy = y + (jitterRng()-0.5)*cell*0.4;
-      const dropout = jitterRng() < 0.12;
-      const u=Math.max(0,Math.min(1,jx/w)), v=Math.max(0,Math.min(1,jy/h));
-      const n = fbm(layers,u,v,weights);
-      const r = (cell*0.5) * Math.max(0,Math.min(1, 1-n*1.3));
-      if(!dropout && r>0.3){ ctx.beginPath(); ctx.arc(jx,jy,r,0,Math.PI*2); ctx.fill(); }
-    }
-  }
-  ctx.restore();
-}});
-
-// 10. Canvas Weave — crosshatched sinusoidal grid, with noise-driven thread wobble
-STYLES.push({name:"Canvas Weave", gen(ctx,w,h,p){
-  const rng = mulberry32(p.seed);
-  const period = Math.max(3, 10*p.scaleFactor);
-  const rot = p.rot*Math.PI/180;
-  const cosr=Math.cos(rot), sinr=Math.sin(rot);
-  const jitter = (rng()-0.5)*0.3;
-  const {layers,weights} = baseNoiseCanvas(w,h,mulberry32(p.seed^0x1e35a7bd),2,p.scaleFactor*2.5);
-  fillFromField(ctx,w,h,(u,v,x,y)=>{
-    const rx = x*cosr - y*sinr, ry = x*sinr + y*cosr;
-    // Real woven fabric has thread-tension irregularity — a mathematically
-    // perfect sine grid reads as synthetic. Warp the phase with slow noise
-    // to give the threads a bit of organic waver.
-    const irregular = fbm(layers,u,v,weights);
-    const wobble = (irregular-0.5)*period*0.6;
-    const wx = Math.sin((rx+wobble)/period*Math.PI*2);
-    const wy = Math.sin((ry+wobble)/period*Math.PI*2);
-    return 0.5 + (wx*wy)*0.35 + jitter*0.2 + (irregular-0.5)*0.15;
-  });
-}});
-
-// 11. Bark & Grain (wood) — stretched fbm along one axis
-STYLES.push({name:"Wood Grain", gen(ctx,w,h,p){
-  const rng = mulberry32(p.seed);
-  const {layers,weights} = baseNoiseCanvas(w,h,rng,4,p.scaleFactor*0.6);
-  const rot = p.rot*Math.PI/180;
-  const cosr=Math.cos(rot), sinr=Math.sin(rot);
-  fillFromField(ctx,w,h,(u,v,x,y)=>{
-    const rx = x*cosr - y*sinr;
-    const stretch = (rx/w)*0.15;
-    const n = fbm(layers, ((u+stretch)%1+1)%1, v*0.25, weights);
-    const rings = Math.sin(n*40)*0.5+0.5;
-    return rings*0.7+0.15;
-  });
-}});
-
-// 12. Ink Bleed — soft blobs with capillary fingering radiating from the wet edge
-STYLES.push({name:"Ink Bleed", gen(ctx,w,h,p){
-  const rng = mulberry32(p.seed);
-  const {layers,weights} = baseNoiseCanvas(w,h,rng,4,p.scaleFactor*0.9);
-  const fingerRng = mulberry32(p.seed^0x27d4eb2f);
-  const {layers:fLayers, weights:fWeights} = baseNoiseCanvas(w,h,fingerRng,5,p.scaleFactor*0.35);
-  fillFromField(ctx,w,h,(u,v)=>{
-    let n = fbm(layers,u,v,weights);
-    let base = Math.pow(n, 0.6); // soft blob shape
-    // Real ink bleed isn't just a soft-edged blob — it wicks outward in thin
-    // branching capillary veins right at the wet/dry boundary. Without this,
-    // it's indistinguishable from any other soft blur.
-    let fn = fbm(fLayers,u,v,fWeights);
-    let vein = 1 - Math.pow(1-Math.abs(2*fn-1), 4); // thin ridge lines
-    let edgeZone = Math.max(0, 1 - Math.abs(base-0.45)*2.2); // strongest right at the boundary
-    return base - vein*edgeZone*0.5;
-  });
-}});
-
-// 13. Static / TV Noise — pure per-pixel random
-STYLES.push({name:"Static Noise", gen(ctx,w,h,p){
-  const rng = mulberry32(p.seed);
-  const img = ctx.createImageData(w,h);
-  const coarse = Math.max(1, Math.round(p.scaleFactor));
-  for(let y=0;y<h;y+=coarse){
-    for(let x=0;x<w;x+=coarse){
-      const c = Math.round(rng()*255);
-      for(let yy=0; yy<coarse && y+yy<h; yy++){
-        for(let xx=0; xx<coarse && x+xx<w; xx++){
-          const p2=((y+yy)*w+(x+xx))*4;
-          img.data[p2]=c; img.data[p2+1]=c; img.data[p2+2]=c; img.data[p2+3]=255;
-        }
-      }
-    }
-  }
-  ctx.putImageData(img,0,0);
-}});
-
-// 14. Cell / Organic Blotches — voronoi-ish via random feature points
-STYLES.push({name:"Organic Blotches", gen(ctx,w,h,p){
-  const rng = mulberry32(p.seed);
-  const n = Math.max(6, Math.round(60/p.scaleFactor));
-  const pts=[];
-  for(let i=0;i<n;i++) pts.push([rng()*w, rng()*h, rng()]);
-  const sample = 3; // downsample for perf, then upscale via drawImage
-  const sw = Math.max(8,Math.round(w/sample)), sh = Math.max(8,Math.round(h/sample));
-  const small = document.createElement('canvas'); small.width=sw; small.height=sh;
-  const sctx = small.getContext('2d');
-  const img = sctx.createImageData(sw,sh);
-  for(let y=0;y<sh;y++){
-    for(let x=0;x<sw;x++){
-      const px = x/sw*w, py = y/sh*h;
-      let best=1e18, second=1e18, bv=0;
-      for(let i=0;i<pts.length;i++){
-        const dx=px-pts[i][0], dy=py-pts[i][1];
-        const d = dx*dx+dy*dy;
-        if(d<best){ second=best; best=d; bv=pts[i][2]; }
-        else if(d<second){ second=d; }
-      }
-      const edge = Math.sqrt(second)-Math.sqrt(best);
-      const v = Math.max(0,Math.min(1, edge/40 + bv*0.3));
-      const idx=(y*sw+x)*4; const c=Math.round(v*255);
-      img.data[idx]=c; img.data[idx+1]=c; img.data[idx+2]=c; img.data[idx+3]=255;
-    }
-  }
-  sctx.putImageData(img,0,0);
-  ctx.imageSmoothingEnabled = true;
-  ctx.drawImage(small,0,0,w,h);
-}});
-
-/* ---------- apply contrast / softness / rotation post-processing ---------- */
-function postProcessMask(canvas, params){
-  const w=canvas.width, h=canvas.height;
-  const ctx = canvas.getContext('2d');
-
-  // rotation (skip for styles that already bake rotation in, harmless either way visually
-  // since it's applied post-hoc as a canvas transform on a re-rendered copy)
-  if(params.rot && params.rotApplied!==true){
-    const tmp = document.createElement('canvas'); tmp.width=w; tmp.height=h;
-    const tctx = tmp.getContext('2d');
-    tctx.translate(w/2,h/2);
-    tctx.rotate(params.rot*Math.PI/180);
-    tctx.translate(-w/2,-h/2);
-    // draw scaled up to cover corners after rotation
-    const diag = Math.sqrt(w*w+h*h);
-    tctx.drawImage(canvas, (w-diag)/2, (h-diag)/2, diag, diag);
-    ctx.clearRect(0,0,w,h);
-    ctx.drawImage(tmp,0,0);
-  }
-
-  const img = ctx.getImageData(0,0,w,h);
-  const d = img.data;
-  const c = params.contrast; // 0..1, 0.5 = neutral
-  const k = (c-0.5)*2; // -1..1
-  const factor = (259*((k*255)+255)) / (255*(259-(k*255)));
-  // Real-world wear concentrates at edges and corners, not uniformly across
-  // the whole surface. This has to actively FORCE the interior toward fully
-  // intact (255) — merely dimming values near the border isn't enough,
-  // since the erosion threshold downstream will still bite into the
-  // untouched raw noise anywhere it naturally dips low, center included.
-  const centerProtectFloor = 0.55; // mild vignette — most of the piece still gets a say from raw noise
-  const edgeBiasReach = 1.6;
-  for(let py=0; py<h; py++){
-    const dy = Math.min(py, h-1-py) / h;
-    for(let px=0; px<w; px++){
-      const dx = Math.min(px, w-1-px) / w;
-      const distFromEdge = Math.min(1, Math.min(dx,dy) * edgeBiasReach); // 0 at border, 1 deep interior
-      const wearInfluence = 1 - (1-centerProtectFloor) * distFromEdge; // 1 at border, centerProtectFloor deep interior
-      const i = (py*w+px)*4;
-      let v = d[i];
-      v = factor*(v-128)+128;
-      v = Math.max(0,Math.min(255,v));
-      v = v*wearInfluence + 255*(1-wearInfluence);
-      d[i]=v; d[i+1]=v; d[i+2]=v;
-    }
-  }
-  ctx.putImageData(img,0,0);
-
-  if(params.soft>0){
-    const blurPx = params.soft*6*params.scaleFactor;
-    if(blurPx>0.3){
-      const tmp = document.createElement('canvas'); tmp.width=w; tmp.height=h;
-      const tctx = tmp.getContext('2d');
-      tctx.filter = `blur(${blurPx}px)`;
-      tctx.drawImage(canvas,0,0);
-      ctx.clearRect(0,0,w,h);
-      ctx.drawImage(tmp,0,0);
-    }
-  }
-  if(params.invert){
-    const img2 = ctx.getImageData(0,0,w,h);
-    const d2=img2.data;
-    for(let i=0;i<d2.length;i+=4){ d2[i]=255-d2[i]; d2[i+1]=255-d2[i+1]; d2[i+2]=255-d2[i+2]; }
-    ctx.putImageData(img2,0,0);
-  }
-}
-
-function renderMask(canvas, styleIdx, params){
-  const ctx = canvas.getContext('2d');
-  ctx.clearRect(0,0,canvas.width,canvas.height);
-  STYLES[styleIdx].gen(ctx, canvas.width, canvas.height, params);
-  const styleHandlesRotation = ["Scratches","Halftone Grunge","Canvas Weave","Wood Grain"].includes(STYLES[styleIdx].name);
-  postProcessMask(canvas, Object.assign({}, params, {rot: styleHandlesRotation?0:params.rot}));
-}
-
-/* =========================================================================
-   UI STATE + WIRING
+   STATE + UI
    ========================================================================= */
 const state = {
-  styleIdx: 0,
-  scale: 60, amount: 18, contrast: 50, soft: 35, rot: 0,
-  invert: false, replaceMode: true,
-  seed: Math.floor(Math.random()*1e9)
+  textureId: null,
+  amount: 15, edge: 55, reach: 40, soft: 8,
+  scale: 100, rot: 0, invert: false,
+  offX: 0, offY: 0, flipX: false, flipY: false,
+  replaceMode: true, maskOnly: false
 };
+const SLIDERS = {
+  amount:['%'], edge:['%'], reach:[' px'], soft:['%'], scale:['%'], rot:['°']
+};
+// preview state (declared before the slider bindings below, which use it)
+let grabbed = null;     // {docW, docH, w, h, s, data(Uint8ClampedArray), dist}
+let fieldCache = null;  // {key, field}
+let maskView = false;
+let previewQueued = false;
+const FIELD_KEYS = ['textureId','scale','rot','invert','offX','offY','flipX','flipY'];
 
-function currentParams(){
-  return {
-    seed: state.seed,
-    scaleFactor: state.scale/100,
-    contrast: state.contrast/100,
-    soft: state.soft/100,
-    rot: state.rot,
-    invert: state.invert
-  };
-}
-
-const styleGrid = document.getElementById('styleGrid');
-STYLES.forEach((s,i)=>{
-  const cell = document.createElement('div');
-  cell.className = 'style-cell' + (i===0?' active':'');
-  cell.dataset.idx = i;
-  const canvas = document.createElement('canvas');
-  canvas.width=64; canvas.height=64;
-  cell.appendChild(canvas);
-  const lbl = document.createElement('div');
-  lbl.className='lbl'; lbl.textContent = s.name;
-  cell.appendChild(lbl);
-  cell.addEventListener('click', ()=>{
-    document.querySelectorAll('.style-cell').forEach(c=>c.classList.remove('active'));
-    cell.classList.add('active');
-    state.styleIdx = i;
-  });
-  styleGrid.appendChild(cell);
-  renderMask(canvas, i, {seed:12345, scaleFactor:1, contrast:0.5, soft:0.15, rot:0, invert:false});
-});
-
-function bindSlider(id, key, suffix){
+function bindSlider(id){
   const el = document.getElementById(id);
   const out = document.getElementById('v_'+id);
-  const upd = ()=>{ state[key]=Number(el.value); out.textContent = el.value+(suffix||''); };
+  const upd = ()=>{
+    state[id] = Number(el.value);
+    out.textContent = el.value + SLIDERS[id][0];
+    if(FIELD_KEYS.includes(id)) invalidateField();
+    schedulePreview();
+  };
   el.addEventListener('input', upd);
   upd();
 }
-bindSlider('scale','scale','%');
-bindSlider('amount','amount','%');
-bindSlider('contrast','contrast','%');
-bindSlider('soft','soft','%');
-bindSlider('rot','rot','°');
+Object.keys(SLIDERS).forEach(bindSlider);
 
-document.getElementById('invert').addEventListener('change', e=> state.invert = e.target.checked);
-document.getElementById('replaceMode').addEventListener('change', e=> state.replaceMode = e.target.checked);
+function bindToggle(id, affectsField){
+  document.getElementById(id).addEventListener('change', e=>{
+    state[id] = e.target.checked;
+    if(affectsField) invalidateField();
+    schedulePreview();
+  });
+}
+bindToggle('invert', true);
+bindToggle('replaceMode', false);
+bindToggle('maskOnly', false);
 
-document.getElementById('randomizeBtn').addEventListener('click', ()=>{
-  state.seed = Math.floor(Math.random()*1e9);
-  setStatus('New seed: '+state.seed);
+document.getElementById('shuffleBtn').addEventListener('click', ()=>{
+  state.offX = Math.random()-0.5; state.offY = Math.random()-0.5;
+  state.flipX = Math.random()<0.5; state.flipY = Math.random()<0.5;
+  invalidateField(); schedulePreview();
 });
-
-/* ---------- copy / paste / saved presets (localStorage) ---------- */
-let clipboard = null;
-document.getElementById('copyBtn').addEventListener('click', ()=>{
-  clipboard = JSON.parse(JSON.stringify(state));
-  setStatus('Settings copied.');
-});
-document.getElementById('pasteBtn').addEventListener('click', ()=>{
-  if(!clipboard){ setStatus('Nothing copied yet.', true); return; }
-  Object.assign(state, clipboard);
-  syncUIFromState();
-  setStatus('Settings pasted.');
+document.getElementById('resetPlaceBtn').addEventListener('click', ()=>{
+  state.offX = 0; state.offY = 0; state.flipX = false; state.flipY = false;
+  invalidateField(); schedulePreview();
 });
 
 function syncUIFromState(){
-  document.querySelectorAll('.style-cell').forEach(c=>c.classList.toggle('active', Number(c.dataset.idx)===state.styleIdx));
-  ['scale','amount','contrast','soft','rot'].forEach(id=>{
+  Object.keys(SLIDERS).forEach(id=>{
     document.getElementById(id).value = state[id];
-    document.getElementById('v_'+id).textContent = state[id] + (id==='rot'?'°':'%');
+    document.getElementById('v_'+id).textContent = state[id] + SLIDERS[id][0];
   });
-  document.getElementById('invert').checked = state.invert;
-  document.getElementById('replaceMode').checked = state.replaceMode;
+  ['invert','replaceMode','maskOnly'].forEach(id=> document.getElementById(id).checked = !!state[id]);
+  renderTexGrid();
+  invalidateField();
+  schedulePreview();
 }
 
-const PRESET_KEY = 'distressor_presets_v1';
+/* ---------- preview ---------- */
+const PREVIEW_MAX = 520;
+const previewCanvas = document.getElementById('preview');
+const previewEmpty = document.getElementById('previewEmpty');
+
+function invalidateField(){ fieldCache = null; }
+function fieldKey(){ return FIELD_KEYS.map(k=>state[k]).join('|'); }
+
+function schedulePreview(){
+  if(previewQueued) return;
+  previewQueued = true;
+  requestAnimationFrame(()=>{ previewQueued = false; renderPreview(); });
+}
+
+function renderPreview(){
+  const tex = activeTexture();
+  if(!grabbed){ previewEmpty.style.display = 'flex'; return; }
+  if(!tex){
+    previewEmpty.innerHTML = 'Load a texture to see the preview.';
+    previewEmpty.style.display = 'flex';
+    const ctx = previewCanvas.getContext('2d');
+    ctx.putImageData(new ImageData(new Uint8ClampedArray(grabbed.data), grabbed.w, grabbed.h), 0, 0);
+    return;
+  }
+  previewEmpty.style.display = 'none';
+  const key = fieldKey();
+  if(!fieldCache || fieldCache.key !== key){
+    fieldCache = {key, field: renderTextureField(tex, grabbed.docW, grabbed.docH, grabbed.w, grabbed.h, state)};
+  }
+  const out = new ImageData(grabbed.w, grabbed.h);
+  applyWear(grabbed.data, fieldCache.field, grabbed.dist, grabbed.w, grabbed.h, grabbed.s, state, out.data, maskView);
+  previewCanvas.getContext('2d').putImageData(out, 0, 0);
+}
+
+document.getElementById('maskViewBtn').addEventListener('click', (e)=>{
+  maskView = !maskView;
+  e.target.textContent = maskView ? 'Show result' : 'Show mask';
+  schedulePreview();
+});
+
+function setGrabbed(fullCanvas, docW, docH){
+  const s = Math.min(1, PREVIEW_MAX / Math.max(docW, docH));
+  const w = Math.max(1, Math.round(docW*s)), h = Math.max(1, Math.round(docH*s));
+  previewCanvas.width = w; previewCanvas.height = h;
+  const ctx = previewCanvas.getContext('2d', {willReadFrequently:true});
+  ctx.clearRect(0,0,w,h);
+  ctx.drawImage(fullCanvas, 0, 0, w, h);
+  const data = ctx.getImageData(0,0,w,h).data;
+  grabbed = {docW, docH, w, h, s: w/docW, data, dist: distanceToEdge(data, w, h)};
+  invalidateField();
+  schedulePreview();
+}
+
+/* ---------- presets (settings only; texture referenced by id) ---------- */
+let clipboard = null;
+const snapshot = ()=> JSON.parse(JSON.stringify(state));
+function loadSettings(obj){
+  Object.assign(state, obj);
+  if(state.textureId && !activeTexture()){
+    setStatus('That preset used a texture that is no longer loaded — keeping the current one.', true);
+    state.textureId = textures.length ? textures[0].id : null;
+  }
+  syncUIFromState();
+}
+document.getElementById('copyBtn').addEventListener('click', ()=>{ clipboard = snapshot(); setStatus('Settings copied.'); });
+document.getElementById('pasteBtn').addEventListener('click', ()=>{
+  if(!clipboard){ setStatus('Nothing copied yet.', true); return; }
+  loadSettings(clipboard); setStatus('Settings pasted.');
+});
+
+const PRESET_KEY = 'destressor_presets_v2';
 function loadPresets(){ try{ return JSON.parse(localStorage.getItem(PRESET_KEY))||{}; }catch(e){ return {}; } }
-function savePresets(p){ localStorage.setItem(PRESET_KEY, JSON.stringify(p)); }
+function savePresets(p){ try{ localStorage.setItem(PRESET_KEY, JSON.stringify(p)); }catch(e){} }
 function refreshPresetSelect(){
   const sel = document.getElementById('savedPresets');
   const presets = loadPresets();
@@ -721,7 +664,7 @@ document.getElementById('savePresetBtn').addEventListener('click', ()=>{
   const name = prompt('Save current settings as:');
   if(!name) return;
   const presets = loadPresets();
-  presets[name] = JSON.parse(JSON.stringify(state));
+  presets[name] = snapshot();
   savePresets(presets);
   refreshPresetSelect();
   document.getElementById('savedPresets').value = name;
@@ -738,34 +681,25 @@ document.getElementById('deletePresetBtn').addEventListener('click', ()=>{
 });
 document.getElementById('savedPresets').addEventListener('change', (e)=>{
   if(!e.target.value) return;
-  const presets = loadPresets();
-  Object.assign(state, presets[e.target.value]);
-  syncUIFromState();
+  loadSettings(loadPresets()[e.target.value]);
   setStatus('Loaded preset "'+e.target.value+'".');
 });
 
 /* =========================================================================
    PHOTOPEA BRIDGE
-   Plugins talk to Photopea by posting a plain string of script code to
-   window.parent; Photopea executes it and streams back any values passed to
-   app.echoToOE(...), plus binary results from Document.saveToOE(...), each
-   followed by a final "done" message. See photopea.com/api and the
-   discussion at github.com/photopea/photopea/issues/7937.
+   Plugins post a string of script to window.parent; Photopea runs it and
+   streams back app.echoToOE(...) values and Document.saveToOE(...) binaries,
+   followed by a final "done".
    ========================================================================= */
 let pending = [];
 window.addEventListener('message', (ev)=>{
   if(ev.source !== window.parent) return;
-  if(pending.length===0){
-    console.warn('[DeStressor] got a message from Photopea with nothing pending — ignoring:', ev.data);
-    return;
-  }
+  if(pending.length===0) return;
   const cur = pending[0];
   if(ev.data === 'done'){
-    console.log('[DeStressor] received "done" for pending call #'+pending.length, cur.settled ? '(was already timed out — late arrival)' : '');
     pending.shift();
     if(!cur.settled){ cur.settled = true; cur.resolve(cur.results); }
   } else {
-    console.log('[DeStressor] received data chunk:', (ev.data instanceof ArrayBuffer) ? ('ArrayBuffer('+ev.data.byteLength+' bytes)') : ev.data);
     cur.results.push(ev.data);
   }
 });
@@ -774,13 +708,11 @@ function runScript(script, timeoutMs){
     const entry = {results:[], settled:false};
     entry.resolve = (r)=>{ clearTimeout(t); resolve(r); };
     pending.push(entry);
-    console.log('[DeStressor] sending script to Photopea, queue depth now', pending.length);
+    // On timeout the entry stays queued so its late "done" is consumed here,
+    // not misapplied to whatever call is queued next.
     const t = setTimeout(()=>{
       if(entry.settled) return;
-      entry.settled = true; // Don't splice it out of `pending` — it needs to
-      // stay in place so the eventual (or never-coming) 'done' for THIS call
-      // gets consumed here, not misapplied to whatever gets queued next.
-      console.error('[DeStressor] TIMEOUT waiting for Photopea. Queue depth:', pending.length, 'Results received so far for this call:', entry.results);
+      entry.settled = true;
       reject(new Error('Photopea did not respond (timeout). Is a document open, with a layer selected?'));
     }, timeoutMs||20000);
     window.parent.postMessage(script, '*');
@@ -792,183 +724,224 @@ function setStatus(msg, isErr, isOk){
   el.textContent = msg;
   el.className = isErr ? 'err' : (isOk ? 'ok' : '');
 }
+const jsStr = (s)=> JSON.stringify(String(s));
+const parseEchoes = (res)=> res.filter(r=> typeof r === 'string').map(r=>{ try{ return JSON.parse(r); }catch(e){ return null; } }).filter(Boolean);
+const findBinary = (res)=> res.find(r=> r instanceof ArrayBuffer || (r && typeof r === 'object' && r.byteLength !== undefined));
+const nextFrame = ()=> new Promise(r=> setTimeout(r, 30));
+// Recursive lookup so layers inside groups can be found again by their token.
+const FIND_FN = `function __dsFind(c, n){ for (var i = 0; i < c.layers.length; i++) { var l = c.layers[i]; if (l.name === n) return l; if (l.typename === "LayerSet") { var r = __dsFind(l, n); if (r) return r; } } return null; }`;
 
-function jsStr(s){ return JSON.stringify(String(s)); }
+/* Export ONLY the active layer, at document size and position:
+   1. tag the layer (rename to a unique token so later scripts can find it),
+      copy it into a temporary transparent document of the same size;
+   2. export that document as PNG;
+   3. close the temp document.
+   If Photopea refuses the temp-document route, fall back to exporting the
+   whole visible document, and say so. */
+async function exportActiveLayer(token){
+  const res1 = await runScript(`/*DS:prepare*/
+    try {
+      var doc = app.activeDocument;
+      if (!doc) throw "No document is open in Photopea.";
+      var lyr = doc.activeLayer;
+      if (!lyr) throw "No layer is selected in Photopea.";
+      if (lyr.typename === "LayerSet") throw "The active layer is a group. Select a pixel layer inside it (or merge the group) first.";
+      if (typeof lyr.kind !== "undefined" && lyr.kind !== LayerKind.NORMAL) throw "The active layer isn't a plain pixel layer (it may be text, a smart object or an adjustment). Rasterize it first.";
+      var info = {ok:true, name: lyr.name, w: doc.width, h: doc.height, opacity: lyr.opacity, blend: String(lyr.blendMode), visible: lyr.visible};
+      lyr.name = ${jsStr(token)};
+      var isolated = false;
+      try {
+        var tmp = app.documents.add(doc.width, doc.height, doc.resolution, "__destressor_tmp__", NewDocumentMode.RGB, DocumentFill.TRANSPARENT);
+        app.activeDocument = doc;
+        var dup = lyr.duplicate(tmp, ElementPlacement.PLACEATBEGINNING);
+        app.activeDocument = tmp;
+        for (var i = 0; i < tmp.layers.length; i++) tmp.layers[i].visible = false;
+        dup = tmp.layers[0];
+        dup.visible = true;
+        try { dup.opacity = 100; } catch(e) {}
+        try { dup.blendMode = BlendMode.NORMAL; } catch(e) {}
+        isolated = true;
+      } catch(eIso) {
+        try { if (app.activeDocument !== doc && app.activeDocument.name === "__destressor_tmp__") app.activeDocument.close(SaveOptions.DONOTSAVECHANGES); } catch(e2) {}
+        app.activeDocument = doc;
+        info.isoError = String(eIso);
+      }
+      info.isolated = isolated;
+      app.echoToOE(JSON.stringify(info));
+    } catch(e) {
+      app.echoToOE(JSON.stringify({ok:false, error: String(e)}));
+    }
+  `);
+  const info = parseEchoes(res1)[0];
+  if(!info) throw new Error('Photopea sent no data back — try again.');
+  if(!info.ok) throw new Error(info.error);
 
-/* ---------- main apply flow ---------- */
+  const res2 = await runScript(`/*DS:export*/
+    try { app.activeDocument.saveToOE("png"); }
+    catch(e) { app.echoToOE(JSON.stringify({ok:false, error: String(e)})); }
+  `, 60000);
+
+  if(info.isolated){
+    await runScript(`/*DS:closeTmp*/
+      try {
+        var t = app.activeDocument;
+        if (t.name === "__destressor_tmp__") t.close(SaveOptions.DONOTSAVECHANGES);
+      } catch(e) {}
+    `, 10000).catch(()=>{});
+  }
+  const err = parseEchoes(res2).find(r=> r.ok === false);
+  if(err) throw new Error(err.error || 'Photopea failed to export the layer.');
+  const buf = findBinary(res2);
+  if(!buf) throw new Error('Photopea did not return any pixel data.');
+
+  const img = await blobToImage(new Blob([buf], {type:'image/png'}));
+  const w = Math.max(1, Math.round(info.w)), h = Math.max(1, Math.round(info.h));
+  const c = document.createElement('canvas'); c.width = w; c.height = h;
+  c.getContext('2d', {willReadFrequently:true}).drawImage(img, 0, 0, w, h);
+  return {canvas: c, info};
+}
+
+async function restoreName(token, name){
+  try{
+    await runScript(`/*DS:restore*/
+      ${FIND_FN}
+      try { var l = __dsFind(app.activeDocument, ${jsStr(token)}); if (l) l.name = ${jsStr(name)}; } catch(e) {}
+    `, 8000);
+  }catch(e){}
+}
+
+function hasOpaque(data){
+  for(let i=3; i<data.length; i+=4) if(data[i] > 8) return true;
+  return false;
+}
+
+const grabBtn = document.getElementById('grabBtn');
 const applyBtn = document.getElementById('applyBtn');
+let busy = false;
+function setBusy(b){ busy = b; grabBtn.disabled = b; applyBtn.disabled = b; }
 
-async function applyDistress(){
-  applyBtn.disabled = true;
-  let cleanupToken = null, cleanupOrigName = null;
+async function grabLayer(){
+  if(busy) return;
+  setBusy(true);
+  const token = '__destressor_' + Date.now() + '__';
+  let info = null;
   try{
     setStatus('Reading active layer…');
-    const token = '__distress_' + Date.now() + '_' + Math.floor(Math.random()*1e6) + '__';
+    const r = await exportActiveLayer(token);
+    info = r.info;
+    await restoreName(token, info.name);
+    setGrabbed(r.canvas, r.canvas.width, r.canvas.height);
+    if(!hasOpaque(grabbed.data)) throw new Error('The layer "'+info.name+'" looks empty.');
+    setStatus('Grabbed "'+info.name+'".' + (info.isolated ? '' : ' (Could not isolate the layer — preview shows all visible layers.)'), !info.isolated, info.isolated);
+  }catch(err){
+    if(info) await restoreName(token, info.name);
+    setStatus('Error: '+(err && err.message ? err.message : err), true);
+  }finally{ setBusy(false); }
+}
+grabBtn.addEventListener('click', grabLayer);
 
-    const scriptTag = `
-      try {
-        var doc = app.activeDocument;
-        if (!doc) throw "No document is open in Photopea.";
-        var lyr = doc.activeLayer;
-        if (!lyr) throw "No layer is selected in Photopea.";
-        if (typeof lyr.kind !== "undefined" && lyr.kind !== LayerKind.NORMAL) {
-          throw "The active layer (\\"" + lyr.name + "\\") isn't a normal pixel layer — it looks like an adjustment layer, text layer, or similar (kind: " + lyr.kind + "). De-Stressor needs a raster/image layer selected, since those don't have pixel content of their own to distress.";
-        }
-        if (typeof lyr.duplicate !== "function") {
-          throw "The active layer (\\"" + lyr.name + "\\") doesn't support the operations De-Stressor needs (it may be a group). Select a normal pixel layer inside it instead.";
-        }
-        app.echoToOE(JSON.stringify({ok:true, name: lyr.name, w: doc.width, h: doc.height}));
-        lyr.name = ${jsStr(token)};
-      } catch(e) {
-        app.echoToOE(JSON.stringify({ok:false, error: String(e)}));
-      }
-    `;
-    const resTag = await runScript(scriptTag);
-    if(!resTag.length) throw new Error('Photopea sent no data back — try clicking Apply again.');
-    const info = JSON.parse(resTag[0]);
-    if(!info.ok) throw new Error(info.error || 'No document / layer selected in Photopea.');
-    cleanupToken = token; cleanupOrigName = info.name; // rename has now happened in Photopea — restore this if we bail out later
-    const w = Math.max(1, Math.round(info.w));
-    const h = Math.max(1, Math.round(info.h));
-    const origName = info.name;
+async function applyDistress(){
+  if(busy) return;
+  const tex = activeTexture();
+  if(!tex){ setStatus('Load a texture first (section 01).', true); return; }
+  setBusy(true);
+  const token = '__destressor_' + Date.now() + '__';
+  let info = null;
+  try{
+    setStatus('Reading active layer…');
+    const r = await exportActiveLayer(token);
+    info = r.info;
+    const canvas = r.canvas, w = canvas.width, h = canvas.height;
+    const ctx = canvas.getContext('2d', {willReadFrequently:true});
+    const img = ctx.getImageData(0, 0, w, h);
+    if(!hasOpaque(img.data)) throw new Error('The layer "'+info.name+'" is empty (or hidden).');
+    if(!info.isolated) setStatus('Could not isolate the layer, so all visible layers were included. Hide the others for a clean result.', true);
 
-    setStatus('Exporting visible layer pixels…');
-    const scriptExport = `
-      try {
-        app.activeDocument.saveToOE("png");
-      } catch(e) {
-        app.echoToOE(JSON.stringify({ok:false, error: String(e)}));
-      }
-    `;
-    const resExport = await runScript(scriptExport, 30000);
-    const errExport = resExport.find(r => typeof r === 'string' && r.indexOf('"ok":false') !== -1);
-    if(errExport) throw new Error(JSON.parse(errExport).error || 'Photopea failed to export the layer.');
-    const pngBuf = resExport.find(r => r instanceof ArrayBuffer || (r && r.byteLength!==undefined));
-    if(!pngBuf) throw new Error('Photopea did not return any pixel data.');
-    setStatus('Exported: '+pngBuf.byteLength+' bytes. Generating '+STYLES[state.styleIdx].name+' mask…');
+    // keep the preview in sync with what is being applied
+    setGrabbed(canvas, w, h);
 
-    const layerBitmap = await blobToImage(new Blob([pngBuf], {type:'image/png'}));
+    setStatus('Rendering texture at '+w+'×'+h+'…'); await nextFrame();
+    const field = renderTextureField(tex, w, h, w, h, state);
+    let dist = null;
+    if(state.edge > 0){ setStatus('Measuring distance to edges…'); await nextFrame(); dist = distanceToEdge(img.data, w, h); }
+    setStatus('Eroding…'); await nextFrame();
+    const out = ctx.createImageData(w, h);
+    applyWear(img.data, field, dist, w, h, 1, state, out.data, state.maskOnly);
+    ctx.putImageData(out, 0, 0);
+    const dataURI = canvas.toDataURL('image/png');
 
-    const work = document.createElement('canvas'); work.width=w; work.height=h;
-    const wctx = work.getContext('2d', {willReadFrequently:true});
-    wctx.drawImage(layerBitmap, 0, 0, w, h);
-    const layerData = wctx.getImageData(0,0,w,h);
-    let sourceOpaquePx = 0;
-    for(let i=3;i<layerData.data.length;i+=4){ if(layerData.data[i] > 8) sourceOpaquePx++; }
-
-    const maskCanvas = document.createElement('canvas'); maskCanvas.width=w; maskCanvas.height=h;
-    renderMask(maskCanvas, state.styleIdx, currentParams());
-    const maskData = maskCanvas.getContext('2d', {willReadFrequently:true}).getImageData(0,0,w,h);
-
-    const amt = state.amount/100;       // 0..1 — how much of the area erodes away
-    const softness = state.soft/100;    // 0..1 — width of the transition band
-    // Threshold ("waterline") erosion instead of a linear blend: pixels whose
-    // mask value falls below the Amount threshold go fully transparent;
-    // pixels above stay fully intact. This is what makes real distress
-    // effects read as "some of it is actually gone" rather than a uniform
-    // semi-transparent haze over everything.
-    const edgeBand = 0.015 + softness*0.12;
-    const loEdge = amt - edgeBand, hiEdge = amt + edgeBand;
-    const ld = layerData.data, md = maskData.data;
-    for(let i=0; i<ld.length; i+=4){
-      const maskV = md[i]/255;           // 1 = keep, 0 = erode
-      let mult;
-      if(maskV <= loEdge) mult = 0;
-      else if(maskV >= hiEdge) mult = 1;
-      else {
-        const t = (maskV-loEdge)/(hiEdge-loEdge);
-        mult = t*t*(3-2*t); // smoothstep
-      }
-      ld[i+3] = Math.round(ld[i+3] * mult);
-    }
-    wctx.putImageData(layerData, 0, 0);
-    const dataURI = work.toDataURL('image/png');
-    let resultOpaquePx = 0;
-    for(let i=3;i<ld.length;i+=4){ if(ld[i] > 8) resultOpaquePx++; }
-    setStatus('Source had '+sourceOpaquePx+' opaque px, result has '+resultOpaquePx+' opaque px (of '+(w*h)+' total). Sending result back to Photopea…');
-    if(sourceOpaquePx === 0){
-      throw new Error('The exported image was fully transparent. Before clicking Apply, hide every other layer in Photopea by hand so only your target layer is showing, then try again.');
-    }
-    const resultName = origName + ' (Distressed)';
-    const scriptFinish = `
+    setStatus('Sending result to Photopea…');
+    const resultName = info.name + (state.maskOnly ? ' (Distress Mask)' : ' (Distressed)');
+    const handleOriginal = state.maskOnly ? '' :
+      (state.replaceMode ? 'try { origLayer.remove(); } catch(e) {}' : 'origLayer.visible = false;');
+    const resFinish = await runScript(`/*DS:finish*/
+      ${FIND_FN}
       var targetDoc = app.activeDocument;
       var srcDoc = null;
       try {
-        var origLayer = targetDoc.layers.getByName(${jsStr(token)});
-        if (!origLayer) throw "Could not find the original layer — it may have been renamed or removed. (name: " + ${jsStr(origName)} + ")";
+        var origLayer = __dsFind(targetDoc, ${jsStr(token)});
+        if (!origLayer) throw "Could not find the original layer — was it renamed or deleted?";
         app.open(${jsStr(dataURI)}, null, false);
         srcDoc = app.activeDocument;
-        if (srcDoc === targetDoc) throw "Opening the processed image did not create a new document as expected.";
+        if (srcDoc === targetDoc) throw "Opening the processed image did not create a new document.";
         var newLayer = srcDoc.activeLayer;
-        if (!newLayer) throw "The processed image opened with no active layer.";
         newLayer.name = ${jsStr(resultName)};
-        var placedLayer = newLayer.duplicate(targetDoc, ElementPlacement.PLACEATBEGINNING);
+        var placed = newLayer.duplicate(targetDoc, ElementPlacement.PLACEATBEGINNING);
         srcDoc.close(SaveOptions.DONOTSAVECHANGES);
         srcDoc = null;
         app.activeDocument = targetDoc;
-        origLayer.name = ${jsStr(origName)};
-        ${state.replaceMode ? 'try{ origLayer.remove(); }catch(e){}' : 'origLayer.visible = false;'}
-        var pb = null;
-        try { var pl = targetDoc.activeLayer; pb = [pl.bounds[0].value, pl.bounds[1].value, pl.bounds[2].value, pl.bounds[3].value]; } catch(eb) {}
-        app.echoToOE(JSON.stringify({ok:true, placedBounds: pb, docSize: [targetDoc.width, targetDoc.height]}));
+        placed = targetDoc.activeLayer;
+        try { placed.move(origLayer, ElementPlacement.PLACEBEFORE); } catch(e) {}
+        ${state.maskOnly ? '' : `
+        try { placed.opacity = ${Number(info.opacity) || 100}; } catch(e) {}
+        try { placed.blendMode = ${info.blend && /^BlendMode\.[A-Z]+$/.test(info.blend) ? info.blend : 'BlendMode.NORMAL'}; } catch(e) {}`}
+        origLayer.name = ${jsStr(info.name)};
+        ${handleOriginal}
+        app.echoToOE(JSON.stringify({ok:true}));
       } catch(e) {
-        // Always clean up the temp document (if it's still open) before
-        // reporting the error, so a failure here doesn't leave an orphaned
-        // empty document sitting in Photopea's tab bar.
-        try { if (srcDoc) { app.activeDocument = srcDoc; srcDoc.close(SaveOptions.DONOTSAVECHANGES); } } catch(e2) {}
+        try { if (srcDoc) srcDoc.close(SaveOptions.DONOTSAVECHANGES); } catch(e2) {}
         try { app.activeDocument = targetDoc; } catch(e3) {}
         app.echoToOE(JSON.stringify({ok:false, error: String(e)}));
       }
-    `;
-    const resFinish = await runScript(scriptFinish, 30000);
-    const finishInfo = resFinish.length ? JSON.parse(resFinish[resFinish.length-1]) : null;
-    if(!finishInfo || !finishInfo.ok) throw new Error((finishInfo && finishInfo.error) || 'Photopea did not confirm the result — check the document, it may have partially applied.');
-    console.log('[DeStressor] placed layer bounds:', finishInfo.placedBounds, 'doc size:', finishInfo.docSize);
-    const boundsStr = finishInfo.placedBounds ? ('bounds '+finishInfo.placedBounds.join(',')+' vs doc '+finishInfo.docSize.join('x')) : 'bounds unavailable';
-    setStatus('Distress applied to "'+resultName+'". ('+boundsStr+')', false, true);
-
-  } catch(err){
-    console.error(err);
+    `, 60000);
+    const fin = parseEchoes(resFinish).pop();
+    if(!fin || !fin.ok) throw new Error((fin && fin.error) || 'Photopea did not confirm the result — check the document.');
+    setStatus('Applied to "'+resultName+'".', false, true);
+  }catch(err){
+    if(info) await restoreName(token, info.name);
     setStatus('Error: '+(err && err.message ? err.message : err), true);
-    if(cleanupToken && cleanupOrigName){
-      try{
-        await runScript(`
-          try {
-            var doc = app.activeDocument;
-            var lyr = doc.layers.getByName(${jsStr(cleanupToken)});
-            if (lyr) { lyr.name = ${jsStr(cleanupOrigName)}; }
-          } catch(e) {}
-        `, 8000);
-      }catch(e2){
-        console.error('[DeStressor] could not restore original layer name — it may still be named', cleanupToken, e2);
-      }
-    }
-  } finally {
-    applyBtn.disabled = false;
-  }
+  }finally{ setBusy(false); }
 }
+applyBtn.addEventListener('click', applyDistress);
 
 function blobToImage(blob){
   return new Promise((resolve,reject)=>{
     const url = URL.createObjectURL(blob);
     const img = new Image();
     img.onload = ()=>{ URL.revokeObjectURL(url); resolve(img); };
-    img.onerror = (e)=>{ URL.revokeObjectURL(url); reject(new Error('Could not decode returned image data.')); };
+    img.onerror = ()=>{ URL.revokeObjectURL(url); reject(new Error('Could not decode image data.')); };
     img.src = url;
   });
 }
 
-applyBtn.addEventListener('click', applyDistress);
-
-/* ---------- initial ping so the panel shows something useful ---------- */
+/* ---------- startup ---------- */
 (async function init(){
+  texDB = await openTexDB();
+  const stored = (await dbTx('readonly', s=> s.getAll())) || [];
+  for(const t of stored){
+    try{ await addTextureBlob(t.blob, t.name, t.id, false); }catch(e){}
+  }
+  if(textures.length) state.textureId = textures[0].id;
+  renderTexGrid();
+
   try{
     const res = await runScript(`app.echoToOE(JSON.stringify({docs: app.documents.length}));`, 8000);
-    const info = JSON.parse(res[0]);
-    if(info.docs>0) setStatus('Ready. '+info.docs+' document(s) open.');
-    else setStatus('Open a document in Photopea, then select a layer to distress.', true);
+    const info = parseEchoes(res)[0];
+    if(!textures.length) setStatus('Load a texture to get started.');
+    else if(info && info.docs>0) setStatus('Ready. Select a layer and click Grab layer.');
+    else setStatus('Open a document in Photopea, then select a layer.', true);
   }catch(e){
-    setStatus('Could not reach Photopea yet — try clicking Apply once a document is open.', true);
+    setStatus('Could not reach Photopea yet — open this panel from inside Photopea.', true);
   }
 })();
 </script>
