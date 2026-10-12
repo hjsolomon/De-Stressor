@@ -731,15 +731,19 @@ const nextFrame = ()=> new Promise(r=> setTimeout(r, 30));
 // Recursive lookup so layers inside groups can be found again by their token.
 const FIND_FN = `function __dsFind(c, n){ for (var i = 0; i < c.layers.length; i++) { var l = c.layers[i]; if (l.name === n) return l; if (l.typename === "LayerSet") { var r = __dsFind(l, n); if (r) return r; } } return null; }`;
 
-/* Export ONLY the active layer, at document size and position:
+/* Export ONLY the active layer, at document size and position, without
+   opening any extra documents:
    1. tag the layer (rename to a unique token so later scripts can find it),
-      copy it into a temporary transparent document of the same size;
-   2. export that document as PNG;
-   3. close the temp document.
-   If Photopea refuses the temp-document route, fall back to exporting the
-   whole visible document, and say so. */
+      hide every other layer (recording which ones by index path), and make
+      the target visible at 100% opacity;
+   2. export the document as PNG (in its own script, like Photopea expects);
+   3. put visibility and opacity back exactly as they were. */
+const AT_FN = `function __dsAt(p){ var c = app.activeDocument, l = null; for (var k = 0; k < p.length; k++) { l = c.layers[p[k]]; c = l; } return l; }`;
+
 async function exportActiveLayer(token){
+  const T = jsStr(token);
   const res1 = await runScript(`/*DS:prepare*/
+    ${FIND_FN}
     try {
       var doc = app.activeDocument;
       if (!doc) throw "No document is open in Photopea.";
@@ -747,26 +751,23 @@ async function exportActiveLayer(token){
       if (!lyr) throw "No layer is selected in Photopea.";
       if (lyr.typename === "LayerSet") throw "The active layer is a group. Select a pixel layer inside it (or merge the group) first.";
       if (typeof lyr.kind !== "undefined" && lyr.kind !== LayerKind.NORMAL) throw "The active layer isn't a plain pixel layer (it may be text, a smart object or an adjustment). Rasterize it first.";
-      var info = {ok:true, name: lyr.name, w: doc.width, h: doc.height, opacity: lyr.opacity, blend: String(lyr.blendMode), visible: lyr.visible};
-      lyr.name = ${jsStr(token)};
-      var isolated = false;
-      try {
-        var tmp = app.documents.add(doc.width, doc.height, doc.resolution, "__destressor_tmp__", NewDocumentMode.RGB, DocumentFill.TRANSPARENT);
-        app.activeDocument = doc;
-        var dup = lyr.duplicate(tmp, ElementPlacement.PLACEATBEGINNING);
-        app.activeDocument = tmp;
-        for (var i = 0; i < tmp.layers.length; i++) tmp.layers[i].visible = false;
-        dup = tmp.layers[0];
-        dup.visible = true;
-        try { dup.opacity = 100; } catch(e) {}
-        try { dup.blendMode = BlendMode.NORMAL; } catch(e) {}
-        isolated = true;
-      } catch(eIso) {
-        try { if (app.activeDocument !== doc && app.activeDocument.name === "__destressor_tmp__") app.activeDocument.close(SaveOptions.DONOTSAVECHANGES); } catch(e2) {}
-        app.activeDocument = doc;
-        info.isoError = String(eIso);
-      }
-      info.isolated = isolated;
+      var info = {ok:true, name: lyr.name, w: doc.width, h: doc.height, opacity: lyr.opacity, blend: String(lyr.blendMode), visible: lyr.visible, hidden: [], shown: []};
+      lyr.name = ${T};
+      var iso = function(c, path){
+        for (var i = 0; i < c.layers.length; i++) {
+          var l = c.layers[i], p = path.concat([i]);
+          if (l.name === ${T}) { info.target = p; continue; }
+          if (l.typename === "LayerSet" && __dsFind(l, ${T})) {
+            if (!l.visible) { l.visible = true; info.shown.push(p); }
+            iso(l, p);
+            continue;
+          }
+          if (l.visible) { l.visible = false; info.hidden.push(p); }
+        }
+      };
+      iso(doc, []);
+      lyr.visible = true;
+      try { lyr.opacity = 100; } catch(e) {}
       app.echoToOE(JSON.stringify(info));
     } catch(e) {
       app.echoToOE(JSON.stringify({ok:false, error: String(e)}));
@@ -776,18 +777,20 @@ async function exportActiveLayer(token){
   if(!info) throw new Error('Photopea sent no data back — try again.');
   if(!info.ok) throw new Error(info.error);
 
-  const res2 = await runScript(`/*DS:export*/
-    try { app.activeDocument.saveToOE("png"); }
-    catch(e) { app.echoToOE(JSON.stringify({ok:false, error: String(e)})); }
-  `, 60000);
-
-  if(info.isolated){
-    await runScript(`/*DS:closeTmp*/
-      try {
-        var t = app.activeDocument;
-        if (t.name === "__destressor_tmp__") t.close(SaveOptions.DONOTSAVECHANGES);
-      } catch(e) {}
-    `, 10000).catch(()=>{});
+  let res2;
+  try{
+    res2 = await runScript(`/*DS:export*/
+      try { app.activeDocument.saveToOE("png"); }
+      catch(e) { app.echoToOE(JSON.stringify({ok:false, error: String(e)})); }
+    `, 60000);
+  } finally {
+    await runScript(`/*DS:unhide*/
+      ${AT_FN}
+      var hidden = ${JSON.stringify(info.hidden)}, shown = ${JSON.stringify(info.shown)};
+      for (var i = 0; i < hidden.length; i++) { try { __dsAt(hidden[i]).visible = true; } catch(e) {} }
+      for (var i = 0; i < shown.length; i++) { try { __dsAt(shown[i]).visible = false; } catch(e) {} }
+      try { var t = __dsAt(${JSON.stringify(info.target || [])}); if (t) { t.opacity = ${Number(info.opacity) || 100}; t.visible = ${info.visible ? 'true' : 'false'}; } } catch(e) {}
+    `, 15000).catch(()=>{});
   }
   const err = parseEchoes(res2).find(r=> r.ok === false);
   if(err) throw new Error(err.error || 'Photopea failed to export the layer.');
@@ -832,7 +835,7 @@ async function grabLayer(){
     await restoreName(token, info.name);
     setGrabbed(r.canvas, r.canvas.width, r.canvas.height);
     if(!hasOpaque(grabbed.data)) throw new Error('The layer "'+info.name+'" looks empty.');
-    setStatus('Grabbed "'+info.name+'".' + (info.isolated ? '' : ' (Could not isolate the layer — preview shows all visible layers.)'), !info.isolated, info.isolated);
+    setStatus('Grabbed "'+info.name+'".', false, true);
   }catch(err){
     if(info) await restoreName(token, info.name);
     setStatus('Error: '+(err && err.message ? err.message : err), true);
@@ -855,7 +858,6 @@ async function applyDistress(){
     const ctx = canvas.getContext('2d', {willReadFrequently:true});
     const img = ctx.getImageData(0, 0, w, h);
     if(!hasOpaque(img.data)) throw new Error('The layer "'+info.name+'" is empty (or hidden).');
-    if(!info.isolated) setStatus('Could not isolate the layer, so all visible layers were included. Hide the others for a clean result.', true);
 
     // keep the preview in sync with what is being applied
     setGrabbed(canvas, w, h);
@@ -885,12 +887,14 @@ async function applyDistress(){
         srcDoc = app.activeDocument;
         if (srcDoc === targetDoc) throw "Opening the processed image did not create a new document.";
         var newLayer = srcDoc.activeLayer;
-        newLayer.name = ${jsStr(resultName)};
-        var placed = newLayer.duplicate(targetDoc, ElementPlacement.PLACEATBEGINNING);
+        newLayer.name = ${jsStr(token + '_out')};
+        newLayer.duplicate(targetDoc, ElementPlacement.PLACEATBEGINNING);
         srcDoc.close(SaveOptions.DONOTSAVECHANGES);
         srcDoc = null;
         app.activeDocument = targetDoc;
-        placed = targetDoc.activeLayer;
+        var placed = __dsFind(targetDoc, ${jsStr(token + '_out')});
+        if (!placed) throw "The result layer did not arrive in the document.";
+        placed.name = ${jsStr(resultName)};
         try { placed.move(origLayer, ElementPlacement.PLACEBEFORE); } catch(e) {}
         ${state.maskOnly ? '' : `
         try { placed.opacity = ${Number(info.opacity) || 100}; } catch(e) {}
